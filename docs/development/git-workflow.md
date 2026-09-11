@@ -1,13 +1,7 @@
-# Git and solo PR workflow
+﻿# Git과 solo PR workflow
 
-Repository was initialized locally on chore/foundation because there was no Git history. No commit, remote or push is created automatically. A human reviews and accepts this foundation before establishing/publishing main. Do not push merely because a remote later exists.
+현재 baseline branch는 `chore/foundation`이며 feature는 main에서 직접 개발하지 않는다. 최신 main에서 `git switch -c feature/<use-case>`로 시작하고 `feature/`, `fix/`, `docs/`, `chore/` branch를 사용한다. `backend/database`, `backend/controller`, `backend/service` 같은 layer branch는 금지한다.
 
-After baseline acceptance, keep main releasable. Start `git switch -c feature/<use-case>` from updated main. Examples: feature/authentication, feature/create-maintenance-request, feature/upload-maintenance-attachment, feature/assign-worker, feature/start-maintenance, feature/manage-visit, feature/resolve-maintenance, feature/confirm-maintenance, feature/notification. Also allow fix/<issue>, docs/<topic>, chore/<topic>. Never backend/database, backend/controller or backend/service branches.
+각 branch는 API → application → domain → persistence → 필요한 migration → test → docs를 포함하는 complete vertical slice다. unrelated 변경을 섞지 않고 작은 commit은 의도를 설명한다. 작업 전후 status/diff를 확인하고 사용자의 uncommitted 변경을 보존한다. force push, destructive reset, history rewrite를 하지 않는다.
 
-Each branch is a complete vertical behavior slice: API -> application -> domain -> persistence -> migration if needed -> tests -> docs. No unrelated changes. Small commits explain intent. Check status/diff before and after work; preserve uncommitted user changes. Rebase/merge main intentionally and resolve migration numbering before any migration has reached a shared environment. No force push, destructive reset or history rewrite without explicit authorization.
-
-PR description: concrete trigger/problem and resulting behavior, scope/exclusions, changed API/schema/permissions, validation results, risks and ADR links. Use .github/pull_request_template.md. Self-review the diff, perform a separate review pass (human or explicitly requested agent review), address findings, rerun affected gates, then human accepts/merges. One human cannot approve their own GitHub PR through standard review approval: do not configure an impossible required-reviewer gate. Require CI and a recorded human checklist; add an independent required reviewer when another maintainer exists.
-
-Suggested branch protection/ruleset to configure later: require PRs, CI build/test and docker jobs, up-to-date branches, resolved conversations; disallow force pushes/deletions; no bypass for normal feature work. These settings are documented, not remotely applied. Build workflows use least-privilege contents:read and no pull_request_target with untrusted code/secrets.
-
-Baseline architecture changes require approved ADRs before implementation. A PR cannot smuggle status/ERD/authorization changes into a refactor. Do not commit secrets, .tools caches or build products. Before the first public push, personally review existing docs/context for private conversation content; preserve it locally unless explicitly instructed otherwise.
+PR에는 문제와 결과 동작, scope, API/schema/permission 변경, validation, risk, ADR link를 기록한다. CI와 human checklist를 필수로 하고 authorization과 frozen rule을 검토한다. Architecture baseline 변경은 approved ADR 없이 구현하지 않는다.

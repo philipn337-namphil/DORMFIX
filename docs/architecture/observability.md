@@ -1,11 +1,7 @@
-# Observability foundation
+﻿# Observability foundation
 
-Endpoints: GET /actuator/health/liveness (process availability, no DB dependency) and GET /actuator/health/readiness (application readiness plus PostgreSQL). Both expose status only, no components/details. All other Actuator URLs are denied and only health is exposed. These are the chosen equivalents of /health and /ready; do not create contradictory aliases. Nginx limits probes to local/operator traffic in production.
+Application log는 Spring Boot structured console(Logstash JSON)를 사용한다. `RequestTraceFilter`는 request마다 UUID를 만들고 `X-Request-ID`, safe error body의 `traceId`, MDC를 설정하며 method/status/durationMs를 기록하고 finally에서 MDC를 정리한다. 외부에서 들어온 ID를 무조건 신뢰하지 않으며 query string, body, token header, private comment, signed URL을 log하지 않는다.
 
-Application logs use Spring Boot structured console logging (Logstash JSON). RequestTraceFilter generates a new UUID per request, returns X-Request-ID, attaches traceId to safe error bodies and MDC, logs method/status/durationMs, and cleans MDC in finally. Untrusted inbound IDs are deliberately not adopted. No raw query strings, bodies, token headers, private comments or signed URLs are logged. This is request correlation, not distributed tracing. Async handlers will need explicit correlation propagation when introduced. Unhandled servlet failures may be logged before container error dispatch finalizes status; add a tested exception handler/observation convention with the first API slice.
+이는 request correlation이며 distributed tracing 전체 구현이 아니다. Async handler가 추가되면 correlation propagation을 별도로 설계한다. 첫 API slice에서 tested exception handler/observation convention을 추가한다.
 
-CI/API tests check trace propagation and error shape. Full PostgreSQL tests check readiness/liveness visibility. Business errors should log stable codes and IDs at sensible severity; unexpected failures are 500 with safe public messages and internal stack traces scrubbed of sensitive values. No per-read domain events.
-
-On Ubuntu, keep Docker json-file rotation bounded; collect application stdout through a reviewed CloudWatch Agent/log driver configuration. Use separate log groups per environment, restricted IAM, retention and alarms for error rate, readiness failure, restart loops, disk, CPU/memory, RDS connections/storage and migration failures. Log shipping config/retention thresholds are deployment prerequisites, not provisioned in Phase 0. No full metrics/tracing stack or public actuator dump endpoints in V1.
-
-Spring Boot's [Actuator reference](https://docs.spring.io/spring-boot/3.5/reference/actuator/endpoints.html) describes health groups and exposure. The foundation chooses the minimal two-probe access surface.
+Ubuntu에서는 Docker json-file rotation을 제한하고 검토된 CloudWatch Agent/log driver로 stdout을 수집한다. 환경별 log group, 제한된 IAM, retention, error/readiness/restart/disk/CPU/memory/RDS/migration alarm을 운영 checklist로 관리한다. V1에는 full metrics/tracing stack이나 public actuator dump endpoint를 추가하지 않는다. 외부에는 최소 health probe만 노출한다.

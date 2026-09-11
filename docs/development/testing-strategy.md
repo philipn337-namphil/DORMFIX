@@ -1,24 +1,7 @@
-# Testing policy and required gates
+﻿# Testing policy와 필수 gate
 
-New business logic requires tests; bug fixes require regression tests where feasible. Never weaken/remove/disable assertions or broaden exclusions to make an implementation pass. Features are incomplete while required checks fail. No arbitrary coverage percentage replaces behavior evidence.
+새 business logic에는 Domain unit, Application/use-case, Repository integration, API/Security test를 적절히 추가한다. PostgreSQL fidelity가 필요한 검증은 Testcontainers를 사용하고 ArchUnit은 package dependency를 검사한다. Checkstyle은 `check`의 merge gate다.
 
-| Layer | Purpose | Required examples as slices arrive |
-|---|---|---|
-| Domain unit | Plain Java invariants/transitions | Every legal/illegal transition; terminal states; reassign -> ASSIGNED; immutable visit consent |
-| Application unit | Authorization and orchestration | owner/non-owner, current/former worker, admin scope, multi-role, stale version, required history |
-| PostgreSQL integration | Persistence/transactions/concurrency | Flyway schema, mapping, partial unique index, residence constraints after review, rollback history atomicity, competing versions |
-| API | HTTP contract and privacy | 400/401/403/404/409, strict DTO fields, no STAFF_ONLY leakage, version required, safe errors |
-| Architecture | Dependency rules | API cannot reach persistence/domain, domain isolation, application adapters, no controller transaction, feature cycles |
-| Runtime smoke | Deployment wiring | safe liveness/readiness, DB readiness, image non-root, denied sensitive endpoints |
+`backend/gradlew check bootJar`는 unit/API/ArchUnit/Checkstyle을 실행하고 `integrationTest`는 Docker/Testcontainers를 이용하는 별도 REQUIRED gate다. Docker가 없을 때 test를 disabled/ignored로 바꾸지 않는다. Foundation test는 실제 business behavior의 부재를 증명한다고 주장하지 않는다.
 
-From backend: `./gradlew check bootJar` (Windows `gradlew.bat`) runs unit/API/ArchUnit and Checkstyle. `./gradlew integrationTest` is a separate REQUIRED merge gate using Docker/Testcontainers. Separation makes quick local feedback possible without pretending a no-Docker run is complete. CI always runs both; no disabledWithoutDocker or ignored failing tests. `compileIntegrationTestJava` proves compilation only, not test execution.
-
-Phase 0 has no business entities, so domain/application rules allow empty selections explicitly until slices arrive. They still evaluate every matching future class. Existing API/platform/cycle rules execute against real scaffold code. Remove the empty-selection allowances when business classes exist. Review supplements static tests for entity setters, JPA fetch behavior and cross-feature authorization.
-
-Foundation integration tests start PostgreSQL, boot the real application, validate/reapply Flyway harmlessly and check safe operational endpoints. Assignment/residence/index tests are deferred with the corresponding production schema, not fake sample tables. Do not claim foundation tests prove absent business behavior.
-
-Transaction tests should use actual committed boundaries: avoid test-wide rollback masking AFTER_COMMIT listeners. Use distinct connections/transactions for concurrency; synchronize contenders deterministically. Verify failed command writes no history and no after-commit effects. Notification write tests prove a new transaction commits. Readiness failure tests should verify 503 under DB loss when operational coverage expands.
-
-Before infra merge: `docker compose config --quiet`, `docker build -t dormfix:local backend`, full Compose readiness smoke and production-template syntax review. Before release: upgrade migration test, security review, backup/restore rehearsal and image/runtime checks. Record exact unavailable checks and causes; unavailability is not success.
-
-Repository-guard regression tests: `python -m unittest discover -s scripts -p 'test_*.py'` from root. These use isolated temporary copies to prove frozen-file, link, wrapper, configuration and CI-gate violations fail. CI runs them with the offline guard.
+Transaction test는 실제 commit과 AFTER_COMMIT을 검증하고 test-wide rollback으로 가리지 않는다. Concurrent command는 별도 transaction/connection과 deterministic synchronization을 사용한다. 실패한 command는 history와 side effect를 남기지 않아야 하며 Notification은 별도 transaction으로 commit되어야 한다. Infra 변경 전에는 Compose config와 Docker image build를 검증한다. Guard regression test는 `python -m unittest discover -s scripts -p 'test_*.py'`로 실행한다.

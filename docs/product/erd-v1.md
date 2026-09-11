@@ -1,6 +1,6 @@
 # ERD v1.0 - frozen logical schema
 
-This is the authoritative column inventory from the 2026-09-10 specification: 15 entities plus user_roles. SQL storage names are an engineering mapping (snake_case; User maps to app_user). This document does not invent missing nullability/defaults, notification types or history enum completeness. No business DDL is shipped in Phase 0; each slice adds reviewed Flyway migrations. ENUM denotes the logical enum; string columns with CHECK constraints are the proposed physical convention in ADR-007.
+이 문서는 2026-09-10 specification의 authoritative column inventory이며 15개 entity와 user_roles를 포함한다. SQL storage name은 engineering mapping(snake_case, User는 app_user)이다. 누락된 nullability/default, notification type, history enum 완전성을 임의로 만들지 않는다. Phase 0에는 business DDL을 제공하지 않고 각 slice가 검토된 Flyway migration을 추가한다. ENUM은 logical enum을 뜻하며 string column과 CHECK constraint는 ADR-007의 physical convention 제안이다.
 
 ## User
 
@@ -220,7 +220,7 @@ created_at TIMESTAMPTZ
 
 ## Supporting user_roles
 
-A user may hold multiple roles: RESIDENT, WORKER, ADMIN, SUPER_ADMIN. The supporting table/collection is named user_roles; the frozen specification does not give its exact columns. Proposed physical mapping is user_id FK plus role with a composite primary key; approve it with the authentication migration.
+User는 RESIDENT, WORKER, ADMIN, SUPER_ADMIN 여러 role을 가질 수 있다. Supporting table/collection 이름은 user_roles이며 Frozen specification은 정확한 column을 정하지 않았다. user_id FK와 role의 composite primary key는 proposed physical mapping이므로 authentication migration에서 승인한다.
 
 ## Enum inventory
 
@@ -256,4 +256,4 @@ RequestHistory examples: REQUEST_CREATED, STATUS_CHANGED, PRIORITY_CHANGED, CATE
 - Actual attachment binaries live in S3; DB holds metadata and object keys only.
 - WorkLog and RequestHistory are append-only in normal operation. Comment soft deletion uses deleted_at. See the frozen [retention policy](permission-state-matrix-v1.md).
 
-No extra business entities, lifecycle states or role associations are introduced by this foundation. Foreign-key delete actions, unspecified nullability, user_roles mapping and additional checks must be resolved with the owning slice and tracked in [review notes](../architecture/open-questions.md).
+이 foundation은 추가 business entity, lifecycle state, role association을 도입하지 않는다. Foreign-key delete action, 미정 nullability, user_roles mapping, 추가 check는 owning slice에서 결정하고 [review note](../architecture/open-questions.md)에 기록한다.

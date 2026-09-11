@@ -1,5 +1,3 @@
-# Infrastructure templates
+﻿# Infra README
 
-Root compose.yml is runnable local PostgreSQL + app after .env is populated. backend/Dockerfile builds and unit/architecture-checks the Java application. PostgreSQL integration tests run outside the image build in CI with Docker available.
-
-production/compose.yml, nginx/ and systemd/ are deployment templates, not a completed or authorized deployment. Production requires a retained immutable image digest, real RDS/TLS/secret configuration, a reviewed migration step and target-host validation. See [deployment architecture](../docs/architecture/deployment.md) and [Ubuntu runbook](../docs/operations/ubuntu-deployment.md). No AWS resources, credentials, Terraform state or deployment automation is included.
+Root `compose.yml`은 `.env`를 채운 뒤 local PostgreSQL + app을 실행한다. `backend/Dockerfile`은 Java application과 unit/architecture check를 build한다. PostgreSQL integration test는 Docker가 있는 CI에서 image build와 분리해 실행한다. Production template은 operator가 host secret을 만든 뒤에만 사용할 수 있다.

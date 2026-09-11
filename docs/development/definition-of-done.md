@@ -1,20 +1,19 @@
-# Definition of Done
+﻿# Definition of Done
 
-A feature is ready for human acceptance only when:
+Feature는 다음을 모두 만족할 때 human acceptance 대상이다.
 
-- Scope and frozen rules are understood; relevant AGENTS/docs and existing code/tests were read.
-- Work is on a vertical feature/fix branch, with no unrelated changes.
-- API commands, DTO validation, stable error/status semantics and concurrency versions match contract.
-- Authentication, role, ownership/current assignment/scope and state checks are implemented and tested, including negative cases.
-- Domain transitions/invariants, consent snapshots, retention and terminal states are preserved.
-- Required Flyway migration is reviewed; PostgreSQL constraints/mappings and upgrade path are verified.
-- State/history commit atomically; external effects run after commit, with honest failure semantics.
-- New business logic and feasible bug regressions have tests; relevant API/integration/architecture tests pass.
-- `python scripts/check_repository.py`, Gradle check/bootJar/integrationTest pass; image/Compose gates pass where relevant.
-- No tests were weakened/deleted to obtain green results; no TODO conceals required behavior.
-- No entity leaks, N+1/unbounded query surprises, dependency cycles, secret/PII leakage or permissive security defaults remain.
-- Contract/architecture/operations docs are updated; baseline changes have approved ADRs.
-- Git diff, migrations, CI results and deployment impact were reviewed; limitations and deferred work are explicitly reported.
-- The human accepts the concrete PR-style result; push/merge/deployment happens only when authorized.
+- Scope와 frozen rule을 이해하고 관련 AGENTS/docs/code/test를 읽었다.
+- Vertical branch에서 unrelated 변경 없이 작업했다.
+- API command, DTO validation, error/status semantics, version concurrency가 contract와 일치한다.
+- Authentication, role, ownership/current assignment/scope, state 검사를 구현하고 negative case를 테스트했다.
+- Domain transition/invariant, consent snapshot, retention, terminal state를 보존했다.
+- 필요한 Flyway migration, PostgreSQL constraint/mapping, upgrade path를 검토했다.
+- State/history commit은 atomic이고 external effect는 commit 후에 수행한다.
+- Business logic/regression/API/integration/architecture test가 통과한다.
+- Repository Guard, Gradle check/bootJar/integrationTest, 관련 Docker gate가 통과한다.
+- Test를 약화하지 않았고 TODO로 필수 동작을 숨기지 않았다.
+- Entity leak, N+1, dependency cycle, secret/PII leak, permissive security default가 없다.
+- 계약/architecture/operations 문서와 approved ADR을 갱신했다.
+- Git diff, migration, CI, deployment impact와 한계를 review했다.
 
-An unavailable required check is recorded as blocked, not passed. Phase 0 acceptance separately acknowledges open product contracts and deferred feature code; it does not waive future feature gates.
+필수 check를 실행할 수 없으면 pass가 아니라 blocked로 기록한다. Phase 0 acceptance가 deferred feature code를 면제하지 않는다.

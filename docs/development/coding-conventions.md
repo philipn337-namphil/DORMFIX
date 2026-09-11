@@ -1,11 +1,7 @@
-# Coding conventions
+﻿# Coding conventions
 
-Use Java 21, four spaces, UTF-8, explicit names and constructor injection. Prefer records for immutable DTO/value payloads, ordinary classes for entities/use cases. Do not add Lombok or generic base services to save a few lines. Keep methods focused on business intent, and comments on why an invariant exists.
+Java 21, four spaces, UTF-8, 명시적 이름과 constructor injection을 사용한다. Immutable DTO/value payload에는 record를, entity/use case에는 일반 class를 선호한다. Lombok이나 generic base service를 줄 수만을 위해 추가하지 않는다. Method는 business intent에 집중하고 comment는 invariant의 이유를 설명할 때만 작성한다.
 
-Use package-by-feature and explicit command services; no giant service, static service locator, controller transaction or entity HTTP response. Mapping happens at API/application boundary. Domain methods are named business actions and validate their own state. Application authorization checks role/relationship/state inside the transaction. See [backend architecture](../architecture/backend-architecture.md).
+Package-by-feature와 explicit command service를 사용한다. Giant service, static service locator, controller transaction, entity HTTP response를 금지한다. Mapping은 API/application 경계에서 수행하고 Domain method가 state를 검증한다. Bean Validation은 shape/range, Domain/Application은 relationship/state를 담당한다. Stable error code와 safe message를 사용하며 fake success를 반환하지 않는다.
 
-Bean Validation covers shape/range; domain/application handles state/relationship. Use stable error codes with safe messages and reviewed mappings. First feature needing general exception translation adds a focused @RestControllerAdvice and tests for 400/404/409/500; the foundation implements only the security error path and shared error record. Never return fake success for deferred endpoints.
-
-Tests describe behavior, use Clock for time-sensitive logic and Mockito only for useful boundaries. Do not mock JPA to prove PostgreSQL constraints. Avoid raw generic query return types in production. Prefer composition and minimal interfaces at real technical boundaries. Keep logs free of sensitive data.
-
-Checkstyle currently enforces no tabs, no star/unused imports and naming/filename consistency. Expand policy with demonstrated value; do not impose style churn on unrelated features. Boot BOM manages framework dependency versions; explicit extra-tool versions are pinned in Gradle. Review dependency patch/support/security status before deployment.
+Test는 behavior를 설명하고 시간 의존 로직에는 Clock, 실제 boundary에만 Mockito를 사용한다. PostgreSQL constraint를 증명하려고 JPA를 mock하지 않는다. 민감 data를 log하지 않는다.
