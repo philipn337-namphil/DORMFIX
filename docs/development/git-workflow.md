@@ -1,0 +1,13 @@
+# Git and solo PR workflow
+
+Repository was initialized locally on chore/foundation because there was no Git history. No commit, remote or push is created automatically. A human reviews and accepts this foundation before establishing/publishing main. Do not push merely because a remote later exists.
+
+After baseline acceptance, keep main releasable. Start `git switch -c feature/<use-case>` from updated main. Examples: feature/authentication, feature/create-maintenance-request, feature/upload-maintenance-attachment, feature/assign-worker, feature/start-maintenance, feature/manage-visit, feature/resolve-maintenance, feature/confirm-maintenance, feature/notification. Also allow fix/<issue>, docs/<topic>, chore/<topic>. Never backend/database, backend/controller or backend/service branches.
+
+Each branch is a complete vertical behavior slice: API -> application -> domain -> persistence -> migration if needed -> tests -> docs. No unrelated changes. Small commits explain intent. Check status/diff before and after work; preserve uncommitted user changes. Rebase/merge main intentionally and resolve migration numbering before any migration has reached a shared environment. No force push, destructive reset or history rewrite without explicit authorization.
+
+PR description: concrete trigger/problem and resulting behavior, scope/exclusions, changed API/schema/permissions, validation results, risks and ADR links. Use .github/pull_request_template.md. Self-review the diff, perform a separate review pass (human or explicitly requested agent review), address findings, rerun affected gates, then human accepts/merges. One human cannot approve their own GitHub PR through standard review approval: do not configure an impossible required-reviewer gate. Require CI and a recorded human checklist; add an independent required reviewer when another maintainer exists.
+
+Suggested branch protection/ruleset to configure later: require PRs, CI build/test and docker jobs, up-to-date branches, resolved conversations; disallow force pushes/deletions; no bypass for normal feature work. These settings are documented, not remotely applied. Build workflows use least-privilege contents:read and no pull_request_target with untrusted code/secrets.
+
+Baseline architecture changes require approved ADRs before implementation. A PR cannot smuggle status/ERD/authorization changes into a refactor. Do not commit secrets, .tools caches or build products. Before the first public push, personally review existing docs/context for private conversation content; preserve it locally unless explicitly instructed otherwise.

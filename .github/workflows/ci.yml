@@ -1,0 +1,61 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main, 'feature/**', 'fix/**', 'chore/**', 'docs/**']
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    name: Java checks and PostgreSQL integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Repository controls
+        run: |
+          python scripts/check_repository.py
+          python -m unittest discover -s scripts -p 'test_*.py'
+      - name: Build, static, architecture, API and PostgreSQL tests
+        working-directory: backend
+        run: bash gradlew --no-daemon check bootJar integrationTest
+      - name: Test and static-check reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-reports
+          path: backend/build/reports/
+          if-no-files-found: warn
+  docker:
+    name: Docker build and local-stack smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate ephemeral local database password
+        shell: bash
+        run: |
+          password=$(openssl rand -hex 24)
+          echo "::add-mask::$password"
+          echo "POSTGRES_PASSWORD=$password" >> "$GITHUB_ENV"
+      - name: Validate and start local stack
+        run: |
+          docker compose config --quiet
+          docker compose up --build -d --wait --wait-timeout 180
+          curl --fail --silent http://127.0.0.1:8080/actuator/health/readiness
+          test "$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/v1/me)" = 401
+      - name: Failure diagnostics
+        if: failure()
+        run: docker compose logs --tail=100
+      - name: Stop ephemeral stack
+        if: always()
+        run: docker compose down

@@ -1,0 +1,7 @@
+spring:
+  flyway:
+    enabled: false
+# Production migration runs once with a separate migration identity before application rollout.
+# Hibernate still validates mappings. Deployment must explicitly verify Flyway validation.
+server:
+  forward-headers-strategy: native

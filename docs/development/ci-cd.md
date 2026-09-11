@@ -1,0 +1,9 @@
+# CI and future CD
+
+CI on PRs and main/feature/fix/chore/docs branches runs Java 21 Gradle check/bootJar/integrationTest plus repository guard checks, uploads test reports even on failure, and separately builds/runs the Docker Compose stack. GitHub-hosted Ubuntu supplies Docker for Testcontainers. No H2 fallback or skip-on-no-Docker. Static checks use Checkstyle; architecture checks use ArchUnit. Flyway validation occurs in the PostgreSQL integration gate; future schema slices add migration/constraint/upgrade tests.
+
+Actions use read-only content permission, no deployment secrets, no pull_request_target, and pinned major action versions with Dependabot update review. Resolve action/image digests and vulnerability scan policy before production release; mutable major tags are a documented foundation trade-off. CI never publishes images or deploys. Require both job checks before merge; branch rules are not created in this session.
+
+Future approved CD: merge main -> repeat required gates -> build/tag immutable commit image -> scan/sign as chosen -> push registry (ECR or approved registry) -> protected staging environment approval -> fetch secrets by IAM/OIDC -> validate/migrate using release migrations and separate DDL role -> select immutable app digest on Ubuntu -> readiness/smoke -> accept release. Promote the same image to production with explicit approval, never rebuild by environment.
+
+Record previous/current image digest, Flyway version and deployment outcome. On application health failure revert only to a schema-compatible previous image. If migration is incompatible, stop and use reviewed forward fix/restore decision. No automated blind schema rollback. Future workflow must use environment protection, constrained OIDC trust, serialized deployments and auditable operator access (prefer SSM over long-lived SSH secrets). Do not implement this deployment workflow before the environment/runbooks are validated.

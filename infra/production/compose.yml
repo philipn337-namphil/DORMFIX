@@ -1,0 +1,25 @@
+name: dormfix
+services:
+  app:
+    image: ${DORMFIX_IMAGE:?Set an immutable registry image digest}
+    env_file:
+      - /etc/dormfix/app.env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /etc/dormfix/rds-ca.pem:/run/certs/rds-ca.pem:ro
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

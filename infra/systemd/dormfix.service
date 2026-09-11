@@ -1,0 +1,18 @@
+[Unit]
+Description=DormFix container lifecycle
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/dormfix
+EnvironmentFile=/etc/dormfix/release.env
+ExecStart=/usr/bin/docker compose -f /opt/dormfix/infra/production/compose.yml up -d --no-build
+ExecStop=/usr/bin/docker compose -f /opt/dormfix/infra/production/compose.yml stop
+TimeoutStartSec=180
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
