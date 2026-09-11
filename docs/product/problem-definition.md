@@ -1,9 +1,9 @@
-# DormFix: frozen V1 problem definition
+﻿# DormFix 제품 문서 권위
 
-Authority: foundation specification supplied 2026-09-10. Product rules are frozen; engineering decisions are recorded separately in ADRs. Historical context is retained under docs/context and cannot override this baseline.
+이 문서는 2026-09-10 foundation 요청으로 확정한 Frozen V1 problem definition이다. Product rule은 frozen이며 engineering decision은 ADR에 별도로 기록한다. `docs/context/`는 historical reference로 현재 baseline을 덮어쓰지 않는다.
 
-DormFix is a dormitory facility maintenance workflow platform in which university dormitory residents report failures in rooms or common facilities, dormitory administrators triage and assign the reports, maintenance workers schedule visits and perform repairs, and residents/admins confirm the result.
+DormFix는 대학 기숙사 거주자가 객실 또는 공용시설의 고장을 신고하고, 관리자가 신고를 분류·우선순위화·배정하며, maintenance worker가 방문을 예약하고 수리하고, resident/admin이 결과를 확인하는 dormitory facility maintenance workflow platform이다.
 
-Reports currently arrive through phone calls, bulletin boards, messages and in-person communication. Residents cannot reliably see receipt, handler, visit timing or completion. Administrators struggle with duplicates, priorities, assignment, visits, repair history, recurring failures and communication.
+현재 신고는 전화, 게시판, message, 대면 전달처럼 분산되어 있다. Resident는 접수 여부, 담당자, 방문 시간, 완료 여부를 안정적으로 알기 어렵고, Administrator는 duplicate, priority, assignment, visit, repair history, recurring failure, communication을 체계적으로 관리하기 어렵다.
 
-The core workflow is REPORT -> ASSIGN -> VISIT -> REPAIR -> CONFIRM. Room/common-space location, worker visits, preferred visit times and room-entry consent are first-class concepts. DormFix is not a generic issue tracker.
+핵심 workflow는 REPORT → ASSIGN → VISIT → REPAIR → CONFIRM이다. Room/common-space location, worker visit, preferred visit time, room-entry consent는 first-class domain concept이다. DormFix는 generic issue tracker가 아니다.

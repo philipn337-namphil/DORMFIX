@@ -1,9 +1,7 @@
-# Repository controls
+﻿# Repository Guard
 
-Run `python scripts/check_repository.py` and `python -m unittest discover -s scripts -p 'test_*.py'` from the repository root. Only Python's standard library is needed. Guard regression tests use isolated temporary copies inside ignored `.tools/` and remove those copies on completion.
+`scripts/check_repository.py`는 필수 파일, 깨진 local Markdown link, accidental frozen contract edit, Gradle wrapper tampering, unsafe configuration과 CI gate를 검사한다. 작은 guard이며 YAML parser, Gradle/ArchUnit/Testcontainers, secret scanner, human review를 대체하지 않는다. Historical `docs/context/`는 검사 대상에서 제외하지만 변경하거나 삭제하지 않는다.
 
-The guard detects broken local Markdown links, missing core files, accidental frozen-contract edits, wrapper tampering and selected unsafe configuration/CI changes. It is deliberately small; it does not replace YAML parsing, Gradle/ArchUnit/Testcontainers, a secret scanner or human review. Historical `docs/context/` is excluded from link checking, not changed or deleted.
+`docs/product/frozen-baseline.sha256.json`은 canonical UTF-8/LF text hash를 저장한다. 다섯 product 문서와 aggregate/transaction/event contract를 포함한다. 자동 hash update 명령은 없으며 승인된 변경은 ADR, manifest, harness/docs/tests를 함께 review해야 한다. Manifest와 checker도 수정 가능하므로 PR review가 최종 권위다.
 
-`docs/product/frozen-baseline.sha256.json` hashes canonical UTF-8/LF text, so Windows line-ending conversion does not cause false drift. It covers all five frozen product documents and the aggregate/transaction/event contracts. There is no automatic baseline-update command: approved changes require a reviewed ADR, explicit manifest update and synchronized harness/docs/tests. The manifest and checker can themselves be edited, so PR review remains the authority.
-
-The Gradle 8.14.3 wrapper/distribution hashes are pinned against the publisher's checksum endpoints under `https://services.gradle.org/distributions/`. Tool upgrades must update both the wrapper and reviewed checker constants.
+Gradle 8.14.3 wrapper/distribution hash는 publisher checksum endpoint 기준으로 고정한다. Tool upgrade 시 wrapper와 checker constant를 함께 검토한다.

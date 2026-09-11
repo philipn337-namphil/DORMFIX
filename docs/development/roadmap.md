@@ -1,32 +1,53 @@
-# Vertical implementation roadmap
+﻿# Vertical implementation roadmap
 
-Phase 0 is foundation only. Do not start Phase 1 until the human reviews this baseline. Every phase uses the [Definition of Done](definition-of-done.md); a feature includes API, application, domain, persistence/migration, tests and docs. No technical-layer branches. Review unresolved contracts before their dependent code, preserving frozen semantics.
+Phase 0은 foundation only다. 각 phase는 [Definition of Done](definition-of-done.md)을 적용하며 API → Application → Domain → Persistence → Migration → Test → 필요한 Documentation을 포함하는 vertical slice로 개발한다. Layer 기반 branch는 금지한다.
 
-| Phase | Vertical branch / outcome | Dependency and acceptance evidence |
-|---|---|---|
-| 0 | chore/foundation | Harness, docs, skeleton, CI/local templates; no product behavior |
-| 1 | feature/authentication | Resolve Q01/Q14 and ADR-013; User/roles, hashing, login/access/refresh/logout/me with negative auth tests; only approved technical storage changes |
-| 2 | feature/location-catalog-baseline | Dormitory/Building/Space/Facility/Category queries and required authorized master-data setup; resolve Q02/Q07 and ADR-014; query scope/validation tests |
-| 3 | feature/residence-management | Residence history depends on User/ROOM Space; resolve Q03, migration and concurrent overlap/ROOM validation tests |
-| 4 | feature/create-maintenance-request | Resident eligibility, location/category/facility, consent/preference, REPORTED request and atomic REQUEST_CREATED history; resolve numbering/nullability; no fake notifications |
-| 5 | feature/query-update-maintenance-request | Scoped list/detail/current-worker query extension and REPORTED resident update, admin allowed metadata; exact DTO/privacy/version conflicts approved and tested |
-| 6 | feature/upload-maintenance-attachment | S3 presign/register/download, key ownership, limits/content checks and cleanup policy; external I/O outside DB transaction |
-| 7 | feature/assign-worker | Initial/reassignment with request @Version, one-active partial index, history and current/former worker tests; Q08 assignment effects reviewed |
-| 8 | feature/triage-maintenance-request | Reject and mark duplicate REPORTED commands; Q06 target/scope rules approved; terminal and concurrent behavior tests |
-| 9 | feature/start-maintenance | start/hold/resume as small coherent worker slices; current assignment and invalid-state/version tests |
-| 10 | feature/manage-visit | Schedule/reschedule/complete/no-access/cancel; Q04 approved; immutable consent snapshots; no request resolution side effect |
-| 11 | feature/maintenance-communication | WorkLog append-only and PUBLIC/STAFF_ONLY comments/soft-delete; Q05/Q13 visibility and state contract; former worker denied |
-| 12 | feature/resolve-maintenance | Current-worker IN_PROGRESS -> RESOLVED, timestamp/history/version atomicity |
-| 13 | feature/confirm-maintenance | Reporter/admin close/reopen RESOLVED; CLOSED remains terminal and recurrence creates new request |
-| 14 | feature/history-notification | Public history projection and DB notification delivery/read commands; audit writes already exist from each command; AFTER_COMMIT/new transaction and accepted loss budget |
-| 15 | feature/admin-dashboard | Scoped summary queries and remaining authorized facility/category/residence management, query/index evidence |
-| 16 | chore/container-hardening | Image digest/version/security review, limits, staging smoke, reboot/runtime/log checks |
-| 17 | chore/ubuntu-staging | Explicitly authorized Ubuntu/Nginx/TLS/IAM environment; validate templates and operations learning |
-| 18 | feature/production-storage | Authorized private RDS/S3 integration, TLS/secrets, migration identity, backups/PITR and restore rehearsal |
-| 19 | chore/continuous-delivery | Registry and protected GitHub Actions deployment, migration gate, health checks and compatible rollback |
-| 20 | chore/production-hardening | CloudWatch alerts, load/security tests, retention policies, incident/restore/reboot drills before launch |
-| V2 | feature/async-notification and separately scoped AI/analytics slices | Approved outbox + SQS + idempotent worker/retry/DLQ first if needed; AI classification/suggestions/duplicate detection/recurrence analytics optional and separately bounded |
+## Phase 0 — Foundation 확정
 
-Ordering differs from a simple feature list for concrete dependencies: Residence needs User and ROOM Space first; durable RequestHistory is built with each changing command, not postponed until its read endpoint; reject/duplicate triage is explicitly included; deployment depends on storage/security and restore validation. No product transition/authorization semantics are changed by this ordering.
+Branch: `chore/foundation`. Harness, architecture, frozen specification, CI, Docker, Git workflow, ADR, test foundation을 확정한다.
 
-Each row may split into smaller use-case branches if review size grows, while each resulting branch still delivers a complete vertical behavior. Do not merge incomplete fake endpoints or use TODOs to conceal required authorization. Frontend remains minimal and consumes tested backend contracts.
+## Phase 1 — Authentication
+
+Branch: `feature/authentication`. User, Role, password hash, signup/login, JWT access token, refresh token, logout, `GET /api/v1/me`, Spring Security를 구현한다. 이때부터 IntelliJ를 본격 사용한다. IntelliJ는 code reading/debug/breakpoint/JPA/test 실행, Codex는 구현/test/diff review를 담당한다.
+
+## Phase 2 — 구조 데이터
+
+Branches: `feature/manage-dormitory-structure`, `feature/manage-residence`. Dormitory, Building, Space, Facility, MaintenanceCategory, Residence를 구현한다. SQL, Flyway, JPA, PostgreSQL을 본격 사용하고 Docker는 우선 PostgreSQL local development에 사용한다.
+
+## Phase 3 — 신고 핵심
+
+Branches: `feature/create-maintenance-request`, `feature/request-query-and-update`, `feature/request-attachments`. MaintenanceRequest aggregate, `@Version`, query/update, pagination, attachment metadata, S3 abstraction, presigned URL contract를 구현한다. 실제 S3 연결은 뒤로 미룬다.
+
+## Phase 4 — 배정 / 상태전이
+
+Branches: `feature/assign-maintenance-worker`, `feature/maintenance-lifecycle`. MaintenanceAssignment, transaction, optimistic lock, partial unique index, authorization, state machine을 구현한다. `assign()`, `start()`, `hold()`, `resume()`, `resolve()`, `reopen()`, `close()`의 전체 흐름을 IntelliJ Debugger로 추적한다. 새 worker는 반드시 다시 `/start`한다.
+
+## Phase 5 — Workflow 완성
+
+Branches: `feature/manage-maintenance-visits`, `feature/maintenance-communication`, `feature/request-history-notifications`, `feature/admin-dashboard`. MaintenanceVisit, WorkLog, Comment, RequestHistory, Notification, Domain Event, AFTER_COMMIT, Dashboard를 구현한다. Visit 완료는 Request resolve가 아니며 frozen permission/state를 유지한다.
+
+## Phase 6 — Docker 통합
+
+Branch: `chore/local-production-hardening`. Spring Boot container와 PostgreSQL container를 `docker compose up`으로 실행한다. Unit, Integration, Testcontainers, API, Security, ArchUnit, Docker smoke gate를 모두 통과시킨다.
+
+## Phase 7 — Ubuntu 실배포
+
+Branch: `chore/ubuntu-deployment`. AWS EC2 Ubuntu, Nginx, Docker, Spring Boot에서 SSH, apt, systemctl, journalctl, docker logs, ss, curl, environment, TLS, restart/reboot recovery를 직접 검증한다. 자동배포 전에 수동배포를 수행한다.
+
+## Phase 8 — AWS 연동
+
+Branch: `chore/aws-infrastructure`. EC2 Ubuntu, RDS PostgreSQL, S3, IAM, CloudWatch를 사용한다. VPC, Security Group, IAM Role, subnet, secret management, backup을 검토하며 local V1 완료 전에는 본격 연결하지 않는다.
+
+## Phase 9 — CI/CD
+
+Branch: `chore/continuous-deployment`. Feature/PR에서는 build, test, ArchUnit, Checkstyle, Docker build를 수행한다. main merge 후 image build → deploy → Ubuntu → health check → rollback 전략을 적용한다.
+
+## Phase 10 — Production hardening / V2 준비
+
+Branch: `chore/production-hardening`. TLS, IAM 최소권한, Security Group, DB backup, health/readiness, structured log, trace ID, CloudWatch, rollback, failure recovery, load/security test를 다룬다. 장애 상황을 Ubuntu에서 직접 추적한다.
+
+## 도구 사용 시점
+
+Codex와 Git/GitHub는 Phase 0~10, IntelliJ와 Java 21/Spring Boot는 Phase 1~10, SQL/Flyway는 Phase 2~10에서 사용한다. Docker는 초기 PostgreSQL local 중심으로 사용하다가 Phase 6부터 application+DB 전체 container로 전환한다. Bash/Linux CLI는 Phase 6 이후, Ubuntu는 Phase 7, AWS EC2는 Phase 7, RDS/S3/IAM/CloudWatch는 Phase 8, GitHub Actions CD는 Phase 9부터 본격 적용한다. AWS SQS는 V2/Phase 10 이후에만 Outbox와 함께 검토한다.
+
+V2는 `Spring Event → Outbox → SQS → Worker → Notification` 확장과 선택적 AI 분류·추천·중복탐지·반복고장 분석으로 한정한다. AI는 V1 dependency가 아니다.

@@ -1,24 +1,11 @@
-# Backend architecture
+﻿# Backend architecture
 
-Root package com.dormfix. One executable Spring Boot application. Packages own features:
+Root package는 `com.dormfix`인 하나의 executable Spring Boot application이다. Package-by-feature 구조는 identity, location, catalog, maintenance, notification, platform으로 나뉜다.
 
-| Package | Responsibility |
-|---|---|
-| identity | User, multi-role authority, authentication |
-| location | Dormitory, Building, Space, Residence history |
-| catalog | Facility, MaintenanceCategory |
-| maintenance | Request lifecycle and independent assignment/visit/communication/history aggregates |
-| notification | Recipient-scoped notifications and event reaction |
-| platform | Small web/security/logging/configuration facilities; no business dependencies |
+각 feature에서 api는 HTTP/DTO/Bean Validation, application은 use case/query/authorization/transaction/port, domain은 invariant/value data, infrastructure는 JPA/S3/technical adapter를 담당한다. `package-info.java`는 확장 지도를 제공할 뿐 fake service/repository를 만들지 않는다.
 
-Inside each feature, api maps HTTP/DTOs and Bean Validation, application owns use cases/queries/authorization/transactions and required ports, domain owns invariants and value data, infrastructure implements JPA/S3/technical adapters. package-info.java is an extension map; there are no pretend services or repositories.
+허용 방향은 `api -> application -> domain`, `infrastructure -> application/domain`이다. API는 domain entity/infrastructure를 참조하지 않고, Application은 JpaRepository/EntityManager/AWS client 대신 실제 사용 시 좁은 port를 사용한다. Domain은 Jakarta Persistence mapping annotation이라는 제한적 예외를 제외하고 Spring/web/AWS에 의존하지 않는다. Feature 간에는 ID/value contract를 사용하며 package cycle과 private graph 접근을 금지한다.
 
-Allowed direction: api -> application -> domain; infrastructure -> application/domain. Composition in platform/config may wire technical API components. API cannot reference domain entities or infrastructure. Application may depend on Spring transaction/event APIs, but not JpaRepository/EntityManager or AWS clients; introduce a narrow repository/storage port when a real use case needs one. Domain may use Jakarta Persistence mapping annotations; it cannot depend on Spring/web/AWS. This is the intentional JPA exception, not a requirement for duplicate persistence/domain models.
+CreateMaintenanceRequestService, AssignMaintenanceRequestService, StartMaintenanceService 등 command use-case service를 선호하고 query는 별도 projection service로 둔다. 이는 full CQRS가 아니다. Controller는 actor ID와 DTO를 전달하고 application이 authorize/load/version/aggregate/persistence/history를 조정한다. Controller는 transaction을 소유하거나 managed entity를 변경하지 않으며 giant MaintenanceRequestService와 generic CRUD status API를 만들지 않는다.
 
-Across features, use an application contract or ID/value event; no access to another feature's infrastructure or private entity graph. Keep package dependencies acyclic. Avoid creating contracts until a real caller exists. platform never imports a feature. ArchUnit enforces the core directions and package cycles; review also checks method behavior and cross-feature API exposure that static dependency rules cannot prove.
-
-Use explicit services: CreateMaintenanceRequestService, UpdateMaintenanceRequestService, AssignMaintenanceRequestService, StartMaintenanceService, HoldMaintenanceService, ResumeMaintenanceService, ResolveMaintenanceService, CloseMaintenanceService, ReopenMaintenanceService, RejectMaintenanceRequestService, MarkDuplicateRequestService. Queries use separate projection-oriented services. This is conceptual command/query separation, not full CQRS.
-
-Controller -> use case with authenticated actor ID and validated DTO -> authorize/load/version check -> aggregate method -> persistence/history -> commit -> effects. Controllers never mutate managed entities or own transactions. No giant MaintenanceRequestService, generic CRUD status endpoint, global controller/service/repository buckets or speculative base abstractions.
-
-The foundation security chain denies all non-probe traffic. Authentication is deliberately not implemented. The first authentication slice replaces that boundary with real Bearer validation and positive/negative tests; never add permitAll to make feature tests pass.
+Foundation security chain은 probe 이외 traffic을 deny한다. Authentication은 아직 구현하지 않았으며 첫 authentication slice에서 Bearer validation과 negative test를 추가한다. 테스트를 통과시키려고 `permitAll`을 넣지 않는다.

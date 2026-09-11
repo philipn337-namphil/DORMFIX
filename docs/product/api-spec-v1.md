@@ -1,5 +1,7 @@
 # API v1.0 - frozen contract
 
+이 문서는 DormFix V1 API의 authoritative frozen contract이다. 아래 endpoint, command, version, error 의미와 S3 presigned 흐름은 변경하지 않는다.
+
 Base /api/v1. Bearer token authentication. Resource reads/metadata updates use REST; lifecycle changes use explicit commands. This is a contract inventory, not a claim that endpoints are implemented. DTO details not specified below require review in the owning feature.
 
 ## Endpoints

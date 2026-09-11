@@ -1,10 +1,10 @@
 {
-  "docs/product/problem-definition.md": "28436959ee5024d2187ac899e864a0bdd8f08602b2ff29c88e04872bd2ef68c3",
-  "docs/product/v1-scope.md": "691a2c6305e7c05e9dd04d82fcd1b1d0eb2fe49f8e6e9322875d55e9192f5866",
-  "docs/product/erd-v1.md": "91a1df13b41c182e469e5164adfe84dfda7a82a47a061954e92551031d7aa666",
-  "docs/product/api-spec-v1.md": "5d8c7ece09cbe6708b41bd6716972adf62dee20413d5f7dbff8ade459b790f35",
-  "docs/product/permission-state-matrix-v1.md": "a6ddc8651c9e26d512b357c8fcad07c48a4f83ae0a7acf7728070c03512fb5fb",
-  "docs/architecture/aggregate-boundaries.md": "f006c15fa80d146730d44c23ec92bcd58be5965c070914a56efe25b8dbec0850",
-  "docs/architecture/transaction-boundaries.md": "ef2f76723f71c0eb8d946b906530ade152d25da83b67161a219fcc3e2eb67159",
-  "docs/architecture/domain-events.md": "b17e14bfddf541b39ca761d70cb7416bf688d7569c84526a13168f3a51519154"
+    "docs/product/problem-definition.md":  "fad64331d9a4a21672c99db329c7b5582b9a12813648ff31a066fcbbfc872e46",
+    "docs/product/v1-scope.md":  "66313bdefeb16f888bab3656d7843720a477b600fcdae1c8a170070214acece0",
+    "docs/product/erd-v1.md":  "91a1df13b41c182e469e5164adfe84dfda7a82a47a061954e92551031d7aa666",
+    "docs/product/api-spec-v1.md":  "d56daa4ced596a5069f7e756ee09969063c9abfb45420cd44bc6191d4b254e41",
+    "docs/product/permission-state-matrix-v1.md":  "fe35227ce1f7477539f307a0e2b7358b3df260d3dcc9b3f3689c023a95568f59",
+    "docs/architecture/aggregate-boundaries.md":  "716fe7f17ee909c4f69a4239bcab964e6bca2fdb09d7aac3c7c9f92e88f0c195",
+    "docs/architecture/transaction-boundaries.md":  "ac9ca6d4bf2b5b0ce69c1dd6d157226ea228610ddbf198a6d31375b7a7c3ea90",
+    "docs/architecture/domain-events.md":  "b694c82b017e597f191cbaa8f4dc48662011ebcec1ceea94413c50b1745dc477"
 }

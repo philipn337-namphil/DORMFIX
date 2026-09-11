@@ -1,6 +1,6 @@
-# Frozen V1 domain events
+﻿# Frozen V1 domain event
 
-RequestHistory is durable append-only audit data, committed with the aggregate change. A domain event announces a completed business action for other components. Neither substitutes for the other. Reads and every minor metadata edit do not need events.
+RequestHistory는 aggregate 변경과 함께 commit되는 durable append-only audit이고, domain event는 완료된 business action을 다른 component에 알리는 value notification이다. Read나 사소한 metadata edit에는 event를 만들지 않는다.
 
 | Group | Frozen event names |
 |---|---|
@@ -8,10 +8,6 @@ RequestHistory is durable append-only audit data, committed with the aggregate c
 | Visit | MaintenanceVisitScheduled, MaintenanceVisitRescheduled, MaintenanceVisitCompleted, MaintenanceVisitCanceled, MaintenanceVisitNoAccess |
 | Communication | CommentCreated, AttachmentAdded |
 
-Use immutable IDs/value data, never managed JPA entities or lazy graphs. Domain entities do not depend on ApplicationEventPublisher. Application services may publish Spring events inside the command transaction; consumers that cause side effects use @TransactionalEventListener(phase = AFTER_COMMIT). Publishing within the transaction plus AFTER_COMMIT handling is how rollback prevents effects. Do not publish only after a transaction and then expect a transaction-bound listener to find it.
+Event payload는 immutable ID/value data만 가지며 managed JPA entity/lazy graph를 넣지 않는다. Domain entity는 `ApplicationEventPublisher`에 의존하지 않는다. Application Service가 transaction 중 Spring event를 publish하고 side-effect consumer는 `@TransactionalEventListener(phase = AFTER_COMMIT)`에서 동작한다. Notification DB write는 별도 `REQUIRES_NEW` transaction으로 수행한다.
 
-An AFTER_COMMIT listener that persists Notification delegates to a separate Spring bean's @Transactional(propagation = REQUIRES_NEW) method. It must not try to write into the completed command transaction. Test rollback produces no notification and committed events use a new transaction. Record handler failure with event/request IDs and trace ID without sensitive payload; isolate failure so callers are not told the business command rolled back when it committed. No retry by blindly repeating the business command.
-
-V1 in-process delivery has a crash window and is not durable/exactly-once. Document and review the accepted notification-loss budget before releasing notifications. RequestHistory remains authoritative even when notification delivery fails. Avoid claims of guaranteed eventual delivery without an outbox.
-
-V2 integration point: application value events -> transactionally persisted outbox -> SQS -> idempotent notification worker with retry/dead-letter queue. Do not create the outbox table or queue now. ADR-009 records this deferred evolution. Spring's [transaction-bound event documentation](https://docs.spring.io/spring-framework/reference/data-access/transaction/event.html) explains phase semantics.
+V1 in-process event에는 crash window가 있으며 exactly-once를 주장하지 않는다. RequestHistory가 authoritative audit이다. V1에는 outbox table/queue를 만들지 않는다. V2 확장 지점은 application value event → transactional outbox → SQS → idempotent worker/retry/DLQ다.

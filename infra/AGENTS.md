@@ -1,5 +1,5 @@
-# Infrastructure scope
+﻿# Infrastructure scope
 
-Read `docs/architecture/deployment.md` and operations runbooks before changing templates. Local Compose and production Compose have different credential/network/migration responsibilities. Never copy local PostgreSQL owner credentials into production.
+`infra/`는 local/production Docker Compose, Nginx, systemd template과 운영 문서를 담는다. 실제 AWS resource나 production deployment를 수행하지 않는다. Secret은 template에만 두고 `/etc/dormfix/app.env` 같은 host-managed 경계를 유지한다.
 
-Templates are not permission to deploy or create AWS resources. Keep production image references immutable, application ports loopback-only, RDS private, runtime non-root, and secrets outside Git. Validate Compose with placeholder environment values; validate Nginx on the target before reload. Never use `down -v` as ordinary recovery. Document migration compatibility and rollback impact for every deployment change.
+변경 시 Compose 문법과 image build를 검증하고, production template은 명시적 operator authorization 없이는 실행하지 않는다. Nginx는 TLS termination/reverse proxy, systemd는 Docker restart/reboot recovery를 설명하는 template이다.

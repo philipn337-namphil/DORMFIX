@@ -1,6 +1,6 @@
-# DormFix documentation authority
+# DormFix 문서 권위 체계
 
-The current frozen V1 specification was captured from the 2026-09-10 foundation request. Historical context is preserved separately and may contain older proposals. Engineering architecture is submitted for human baseline review; product semantics are already frozen. Open proposals do not override either authority.
+현재 Frozen V1 specification은 2026-09-10 foundation 요청을 기준으로 기록했다. Historical context는 별도로 보존하며 오래된 제안을 포함할 수 있다. Engineering architecture는 human baseline review 대상이고 product semantics는 이미 frozen이다. Open proposal은 어느 권위도 덮어쓰지 않는다.
 
 ## Product - authoritative frozen contract
 
@@ -31,6 +31,6 @@ The current frozen V1 specification was captured from the 2026-09-10 foundation 
 - [Rollback](operations/rollback.md)
 - [Troubleshooting](operations/troubleshooting.md)
 
-## Provenance and enforcement
+## 출처와 enforcement
 
-Original context files in context/ remain unchanged. They are historical reference, not agent instructions or permission to restore superseded architecture. Root/scoped AGENTS point to the detailed authorities. scripts/check_repository.py checks required files, relative documentation links, frozen-product hashes, wrapper checksum and key configuration controls. Product hash updates require approved baseline changes; a hash is a review tripwire, not tamper-proof governance. ArchUnit, Checkstyle, API tests, Testcontainers, CI and human review provide complementary enforcement.
+context/의 원본 파일은 변경하지 않는다. 이는 historical reference이며 agent 지침이나 폐기된 architecture를 복원할 권한이 아니다. Root/scoped AGENTS는 상세 권위 문서를 가리킨다. `scripts/check_repository.py`는 필수 파일, 상대 문서 link, frozen-product hash, wrapper checksum, 주요 configuration control을 검사한다. Product hash 갱신은 승인된 baseline 변경일 때만 수행한다. Hash는 review tripwire이지 위조 방지 governance가 아니다. ArchUnit, Checkstyle, API test, Testcontainers, CI와 human review가 함께 enforcement를 제공한다.

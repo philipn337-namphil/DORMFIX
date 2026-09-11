@@ -1,6 +1,6 @@
-# Frozen V1 permissions and state machine
+﻿# Frozen V1 권한과 state machine
 
-Authorization evaluates authentication -> role -> resource relationship/scope -> current state. An authenticated wrong role, non-owner or former assignee receives 403, not 409. State and version conflicts for an authorized actor receive 409. SUPER_ADMIN includes ADMIN operations but never bypasses lifecycle rules. Multi-role combination details and dormitory-scope persistence require review.
+Authorization은 Authentication → Role → Ownership/Assignment/Scope → Current State 순으로 평가한다. 인증된 잘못된 role, non-owner, former assignee는 403이고, authorized actor의 state/version conflict는 409다. SUPER_ADMIN도 lifecycle rule을 우회하지 않는다. 다중 role 조합과 dormitory-scope 저장 세부사항은 review 대상이다.
 
 | Command | Source | Target | Authorized relationship |
 |---|---|---|---|
@@ -15,28 +15,17 @@ Authorization evaluates authentication -> role -> resource relationship/scope ->
 | reject | REPORTED | REJECTED | scoped ADMIN/SUPER_ADMIN |
 | mark duplicate | REPORTED | DUPLICATE | scoped ADMIN/SUPER_ADMIN; reference original |
 
-CLOSED, REJECTED and DUPLICATE are terminal. No other transition is authorized. A CLOSED request cannot reopen. Reassignment closes the previous assignment and creates a new one; the new worker explicitly starts work again. At most one assignment per request has unassigned_at IS NULL, reinforced by a PostgreSQL partial unique index.
+CLOSED, REJECTED, DUPLICATE는 terminal이다. 다른 transition은 허용하지 않는다. CLOSED request는 reopen할 수 없다. Reassignment는 기존 assignment를 종료하고 새 assignment를 만들며 새 worker가 다시 start한다. Request당 `unassigned_at IS NULL` assignment는 최대 하나이고 PostgreSQL partial unique index로 보강한다.
 
-## Resident
+## Role별 규칙
 
-Create requests; read own requests; edit own request only in REPORTED; add PUBLIC comments and allowed attachments to own active requests; view own visit schedules; close/reopen own RESOLVED request. Cannot directly set status, priority, reporter or assignment. STAFF_ONLY comments are never visible. Active-state definition for communication and exact attachment/deletion permissions remain review questions, not invented rules.
+- RESIDENT: 본인 request 생성/조회, REPORTED에서만 수정, 본인 active request에 PUBLIC comment와 허용 attachment 추가, visit schedule 조회, RESOLVED request close/reopen. status, priority, reporter, assignment를 직접 지정하지 않는다. STAFF_ONLY comment는 보지 못한다.
+- WORKER: current active assignee만 start/hold/resume/resolve, valid state의 visit 관리, WorkLog, PUBLIC/STAFF_ONLY comment, repair attachment를 작성한다. Former worker는 historical read-only만 가능하다.
+- ADMIN: dormitory scope의 전체 request 조회, active request의 허용된 category/priority/location 조정, assign/reassign, REPORTED reject/duplicate, visit 관리, RESOLVED close/reopen, facility/category/residence 관리. Resident entry consent를 대신 변경하지 않는다.
+- SUPER_ADMIN: ADMIN 기능과 Dormitory/Building/Space, user-role, system/master-data 관리를 가진다. 모든 domain state rule은 동일하게 적용된다.
 
-## Worker
+## Visit과 보존
 
-Only the current active assignee may start/hold/resume/resolve, create/manage visits in valid states, write WorkLogs, write PUBLIC/STAFF_ONLY comments and add repair attachments. A previously assigned worker may retain read-only historical access, but may not execute commands, comment or add WorkLogs. Historical read projections must not accidentally become write authority.
+VisitStatus는 SCHEDULED, COMPLETED, CANCELED, NO_ACCESS다. Request가 ASSIGNED, IN_PROGRESS, ON_HOLD일 때만 생성한다. Visit 완료는 request resolve가 아니다. 생성 시 `entry_policy`를 `entry_policy_snapshot`으로, `contact_before_entry`를 visit에 snapshot하여 이후 request 변경에도 immutable하게 보존한다. EntryPolicy는 RESIDENT_PRESENT_REQUIRED 또는 ABSENT_ENTRY_ALLOWED이며 contact_before_entry는 독립적이다.
 
-## Administrator
-
-ADMIN can read all requests within dormitory scope, adjust category/priority/location for active requests according to API rules, assign/reassign, reject or mark REPORTED requests duplicate, schedule visits, close/reopen RESOLVED requests and manage facilities/categories/residences. Cannot modify resident-controlled room-entry consent on the resident's behalf.
-
-SUPER_ADMIN adds Dormitory/Building/Space, user-role and system/master-data management. All domain state rules still apply.
-
-## Visit and entry consent
-
-Visit statuses: SCHEDULED, COMPLETED, CANCELED, NO_ACCESS. Creation is allowed only when the request is ASSIGNED, IN_PROGRESS or ON_HOLD. Visit completion does not resolve the request. Snapshot entry_policy into entry_policy_snapshot and contact_before_entry into the visit at creation; these snapshots remain immutable despite later request changes.
-
-EntryPolicy: RESIDENT_PRESENT_REQUIRED or ABSENT_ENTRY_ALLOWED. contact_before_entry is independent: absent entry may be allowed while prior contact remains required. No admin consent override. Visit modification/terminal transition details, actual start timestamp ownership and scheduled visits during reassignment need explicit review before implementation.
-
-## Retention
-
-Do not casually hard-delete User, Dormitory, Building, Space, Facility, MaintenanceCategory, MaintenanceRequest, MaintenanceAssignment, MaintenanceVisit, WorkLog or RequestHistory. Use status/active changes, e.g. Facility RETIRED, category inactive. Preserve historical Residence records. Comment uses soft deletion. WorkLog and RequestHistory are append-only in normal operation. Attachment deletion is restricted and must coordinate S3 cleanup. Notification retention may be defined later.
+User, Dormitory, Building, Space, Facility, MaintenanceCategory, MaintenanceRequest, MaintenanceAssignment, MaintenanceVisit, WorkLog, RequestHistory는 임의 hard-delete하지 않는다. Residence history를 보존하고 Comment는 soft-delete, WorkLog/RequestHistory는 append-only다. Attachment 삭제는 S3 cleanup policy와 함께 처리한다.

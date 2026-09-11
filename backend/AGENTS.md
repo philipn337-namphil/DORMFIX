@@ -1,9 +1,5 @@
-# Backend scope
+﻿# Backend scope
 
-Read root AGENTS and `docs/architecture/backend-architecture.md`, `database.md`, `security.md`, and `docs/development/testing-strategy.md` for the relevant change.
+Java 21, checked-in Gradle wrapper, Spring Boot BOM-managed dependency를 사용한다. `check`는 unit/API/architecture test와 Checkstyle을 포함하고 `integrationTest`는 PostgreSQL/Testcontainers gate다. Docker가 없을 때 skip하지 않으며 PostgreSQL fidelity를 위해 H2를 대체 사용하지 않는다.
 
-Use Java 21, checked-in Gradle wrapper, Spring Boot BOM-managed dependencies. `check` includes unit/API/architecture tests and Checkstyle. `integrationTest` is a separate required PostgreSQL/Testcontainers gate; never add skip-on-no-Docker. No H2 substitute for PostgreSQL tests.
-
-Place business code under the owning feature's api/application/domain/infrastructure package. `platform` holds small technical cross-cutting facilities only; it must not depend on feature code. Do not add placeholder REST endpoints that claim a feature works. The foundation denies all business access until authentication is implemented.
-
-Keep entity constructors protected for JPA and public creation/transition methods explicit. Avoid Lombok @Data on entities. Application services own transactions and authorization; controllers own mapping/validation only. Test the negative path as well as success. No production entities or business migrations are currently implemented.
+Business code는 owning feature의 api/application/domain/infrastructure 아래 둔다. `platform`은 작은 technical cross-cutting facility만 담고 feature에 의존하지 않는다. 아직 동작하지 않는 feature를 가장하는 REST endpoint를 추가하지 않는다. Authentication 전까지 foundation은 business access를 deny한다.
