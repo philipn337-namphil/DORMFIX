@@ -1,6 +1,6 @@
 /**
- * Users, roles and authentication; token storage requires ADR-013 approval.
- * HTTP DTOs, validation and mapping only.
- * Business implementation intentionally deferred to vertical feature slices.
+ * Identity HTTP DTOs, validation and mapping.
+ * Signup and login are public; the current-user endpoint requires bearer authentication.
+ * Refresh-token rotation and logout revocation are implemented.
  */
 package com.dormfix.identity.api;

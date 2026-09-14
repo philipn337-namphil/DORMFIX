@@ -3,12 +3,19 @@ package com.dormfix.platform;
 import com.dormfix.platform.api.ApiErrorWriter;
 import com.dormfix.platform.api.RequestTraceFilter;
 import com.dormfix.platform.config.SecurityConfiguration;
+import com.dormfix.identity.application.SignupService;
+import com.dormfix.identity.application.LoginService;
+import com.dormfix.identity.application.CurrentUserService;
+import com.dormfix.identity.application.RefreshTokenService;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -20,6 +27,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class SecurityBoundaryTest {
     @Autowired
     private MockMvc mvc;
+    @MockitoBean
+    private SignupService signupService;
+    @MockitoBean
+    private LoginService loginService;
+    @MockitoBean
+    private CurrentUserService currentUserService;
+    @MockitoBean
+    private RefreshTokenService refreshTokenService;
+    @MockitoBean
+    private JwtDecoder jwtDecoder;
+    @MockitoBean
+    private JwtAuthenticationConverter jwtAuthenticationConverter;
 
     @Test
     void unauthenticatedCommandsAreDeniedWithSafeErrorAndTrace() throws Exception {

@@ -8,4 +8,4 @@ Root package는 `com.dormfix`인 하나의 executable Spring Boot application이
 
 CreateMaintenanceRequestService, AssignMaintenanceRequestService, StartMaintenanceService 등 command use-case service를 선호하고 query는 별도 projection service로 둔다. 이는 full CQRS가 아니다. Controller는 actor ID와 DTO를 전달하고 application이 authorize/load/version/aggregate/persistence/history를 조정한다. Controller는 transaction을 소유하거나 managed entity를 변경하지 않으며 giant MaintenanceRequestService와 generic CRUD status API를 만들지 않는다.
 
-Foundation security chain은 probe 이외 traffic을 deny한다. Authentication은 아직 구현하지 않았으며 첫 authentication slice에서 Bearer validation과 negative test를 추가한다. 테스트를 통과시키려고 `permitAll`을 넣지 않는다.
+Foundation security chain은 probe와 signup/login 이외 traffic을 deny한다. Bearer access token은 Spring Security resource-server로 검증하고 `/api/v1/me`만 현재 인증 사용자 조회를 허용한다. 테스트를 통과시키려고 `permitAll`을 넣지 않는다.

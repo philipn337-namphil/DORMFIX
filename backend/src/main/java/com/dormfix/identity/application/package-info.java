@@ -1,6 +1,5 @@
 /**
- * Users, roles and authentication; token storage requires ADR-013 approval.
- * Command services, authorization, transactions, query services and boundary ports.
- * Business implementation intentionally deferred to vertical feature slices.
+ * Authentication use-case boundaries, including narrow persistence ports.
+ * Signup, login, current-user lookup, refresh rotation and logout revocation are implemented.
  */
 package com.dormfix.identity.application;
