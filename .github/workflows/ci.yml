@@ -13,7 +13,7 @@ jobs:
     name: Java checks and PostgreSQL integration
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -40,7 +40,7 @@ jobs:
     name: Docker build and local-stack smoke
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Generate ephemeral local database password
         shell: bash
         run: |
