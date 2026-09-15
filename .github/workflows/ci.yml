@@ -31,7 +31,7 @@ jobs:
         run: bash gradlew --no-daemon check bootJar integrationTest
       - name: Test and static-check reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-reports
           path: backend/build/reports/
