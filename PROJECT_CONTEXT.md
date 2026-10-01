@@ -8,10 +8,12 @@ DormFix는 기숙사 시설 문제를 `REPORT → ASSIGN → VISIT → REPAIR �
 
 ## 현재 상태
 
-- 현재 브랜치는 `main`이다.
-- 현재 Phase는 foundation 기준 위에 Authentication Phase 1을 완료한 상태다.
+- 현재 브랜치는 `feature/manage-dormitory-structure`이며 `origin/feature/manage-dormitory-structure`를 추적한다.
+- Phase 2 Dormitory Structure와 Residence vertical slice는 검증까지 완료했으며, 다음 단계는 Phase 3 MaintenanceRequest workflow 준비다.
 - Authentication feature commit `2984092b48ff4d7cb1cffa4507492b2777a5c79c`는 `origin/main`과 `origin/feature/authentication`에 반영되어 있다.
 - 다음 제품 기능은 사용자의 명시적인 요청 없이는 구현하지 않는다.
+- Phase 2는 V3/V4/V5 Flyway migration, 구조 read/write API, Facility/Category lifecycle, Dormitory scope authorization, Residence history/query API와 PostgreSQL exclusion protection을 포함해 완료했다. Phase 3는 이 구조 ID와 authorization boundary를 소비해야 한다.
+- 현재 다음 작업 위치: ADR-016에 따라 확정된 Admin API 계약을 기준으로 Dormitory/Building/Space/Facility/MaintenanceCategory 관리 API를 구현한다. 이번 계약 확정 작업에서는 Java Controller/Application Service를 구현하지 않는다.
 - Product V1 계약은 `docs/product/`에 frozen 상태로 관리한다.
 - 아키텍처는 명시적이고 테스트 가능한 Java modular monolith를 따른다.
 - 백엔드는 package-by-feature 구조의 API → application → domain 흐름을 따른다.
@@ -46,3 +48,10 @@ MaintenanceRequest lifecycle, authorization, transaction, event, JPA, retention,
 - 이번 요청과 직접 관련된 Product/Architecture 문서
 - 관련 코드와 테스트
 - 작업 종료 전 필수 검증 결과와 변경 범위
+-
+## 2026-09-23 implementation update
+
+- ADR-016 Dormitory/Building/Space Admin write APIs are implemented under `/api/v1/admin`.
+- Create, metadata PATCH, explicit deactivate, and explicit reactivate commands are SUPER_ADMIN-only.
+- Child creation/reactivation below an inactive parent returns 409 `INACTIVE_PARENT`; PATCH DTOs reject unknown fields such as `active`.
+- Facility and MaintenanceCategory Admin write APIs remain intentionally unimplemented.

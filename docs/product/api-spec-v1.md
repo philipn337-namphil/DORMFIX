@@ -56,7 +56,45 @@ All paths below include the base. `{id}` identifies a request unless another nam
 | POST | /notifications/read-all | Mark own notifications read |
 | GET | /notifications/unread-count | Own unread count |
 
-Admin group /admin/... has representative POST/PATCH/deactivate facilities, POST/PATCH/deactivate categories, POST/PATCH residences, GET users and GET dashboard summary. Exact admin paths and DTOs are not fully specified. Dormitory/Building/Space and role/master-data administration belong to SUPER_ADMIN. Do not invent a generic delete/status endpoint.
+### Structure administration
+
+All structure-management paths use the `/admin` prefix. These endpoints are part of the frozen contract but are not implemented yet.
+
+| Method | Path | Request DTO | Role |
+|---|---|---|---|
+| POST | /admin/dormitories | `CreateDormitoryRequest(name, address, timezone)` | SUPER_ADMIN |
+| PATCH | /admin/dormitories/{dormitoryId} | `UpdateDormitoryRequest(name, address, timezone)` | SUPER_ADMIN |
+| POST | /admin/dormitories/{dormitoryId}/deactivate | `DeactivateCommand` | SUPER_ADMIN |
+| POST | /admin/dormitories/{dormitoryId}/buildings | `CreateBuildingRequest(name, buildingType)` | SUPER_ADMIN |
+| PATCH | /admin/buildings/{buildingId} | `UpdateBuildingRequest(name, buildingType)` | SUPER_ADMIN |
+| POST | /admin/buildings/{buildingId}/deactivate | `DeactivateCommand` | SUPER_ADMIN |
+| POST | /admin/buildings/{buildingId}/spaces | `CreateSpaceRequest(name, spaceType, floor, capacity)` | SUPER_ADMIN |
+| PATCH | /admin/spaces/{spaceId} | `UpdateSpaceRequest(name, spaceType, floor, capacity)` | SUPER_ADMIN |
+| POST | /admin/spaces/{spaceId}/deactivate | `DeactivateCommand` | SUPER_ADMIN |
+| POST | /admin/spaces/{spaceId}/facilities | `CreateFacilityRequest(name, facilityType, assetCode, installedAt, description)` | scoped ADMIN/SUPER_ADMIN |
+| PATCH | /admin/facilities/{facilityId} | `UpdateFacilityRequest(name, facilityType, assetCode, installedAt, description)` | scoped ADMIN/SUPER_ADMIN |
+| POST | /admin/facilities/{facilityId}/out-of-service | `FacilityStatusCommand` | scoped ADMIN/SUPER_ADMIN |
+| POST | /admin/facilities/{facilityId}/reactivate | `FacilityStatusCommand` | scoped ADMIN/SUPER_ADMIN |
+| POST | /admin/facilities/{facilityId}/retire | `FacilityStatusCommand` | scoped ADMIN/SUPER_ADMIN |
+| POST | /admin/categories | `CreateMaintenanceCategoryRequest(parentId, code, name, defaultPriority, sortOrder)` | SUPER_ADMIN |
+| PATCH | /admin/categories/{categoryId} | `UpdateMaintenanceCategoryRequest(code, name, defaultPriority, sortOrder)` | SUPER_ADMIN |
+| POST | /admin/categories/{categoryId}/deactivate | `DeactivateCommand` | SUPER_ADMIN |
+| POST | /admin/categories/{categoryId}/reactivate | `ReactivateCommand` | SUPER_ADMIN |
+| POST | /admin/residences | `CreateResidenceRequest(residentId, roomSpaceId, startDate)` | scoped ADMIN/SUPER_ADMIN |
+| GET | /admin/residences/{residenceId} | `ResidenceResponse` | scoped ADMIN/SUPER_ADMIN |
+| GET | /admin/residences?residentId=&roomSpaceId=&current=&page=&size= | `ResidencePageResponse` | scoped ADMIN/SUPER_ADMIN |
+| POST | /admin/residences/{residenceId}/end | `EndResidenceCommand` | scoped ADMIN/SUPER_ADMIN |
+| GET | /me/residences?current=&page=&size= | own `ResidencePageResponse` history | RESIDENT self |
+
+`Dormitory.name` is not unique in V1; duplicate names do not produce a dedicated 409 conflict. `MaintenanceCategory.parentId` is create-only: it may be supplied in `CreateMaintenanceCategoryRequest`, is absent from `UpdateMaintenanceCategoryRequest`, and no category move endpoint exists in V1. DTOs are allow-listed and must not bind managed entities or arbitrary status fields.
+
+Facility status commands allow `ACTIVE -> OUT_OF_SERVICE -> ACTIVE`, and `ACTIVE` or `OUT_OF_SERVICE -> RETIRED`. `RETIRED` is terminal and cannot be reactivated. Facility status is never changed through PATCH or a generic status endpoint.
+
+Category reactivation is an explicit SUPER_ADMIN command. It returns 409 `INACTIVE_PARENT` when its immediate parent is inactive; parent deactivation does not cascade. Residence uses `[startDate, endDate)` dates. Creation accepts only `residentId`, `roomSpaceId`, and a non-future `startDate`, always creates a current record, and is ended only by the explicit end command. Admin list requires one of `residentId`, `roomSpaceId`, or `current`, has size 1–100, and uses `startDate DESC, id DESC`. Admin operations require the room dormitory scope; residents read only their own history.
+
+Admin group `/admin/...` also includes representative POST/PATCH residences, GET users and GET dashboard summary. Facility management is limited to the ADMIN's dormitory scope; SUPER_ADMIN is global. MaintenanceCategory is V1 global Master Data and is SUPER_ADMIN-only. Do not invent a generic delete endpoint.
+
+Structure administration policy: only SUPER_ADMIN may create, update, or deactivate Dormitory, Building, and Space. An ADMIN with the relevant dormitory scope or a SUPER_ADMIN may create, update, and issue the Facility status commands. MaintenanceCategory creation, update, and deactivation are SUPER_ADMIN-only. Parent deactivation does not automatically propagate to children; creation and reactivation below an inactive parent are denied; operational data is never hard-deleted.
 
 ## Commands and concurrency
 
@@ -76,7 +114,7 @@ Authorize request -> server issues S3 presigned upload URL -> client uploads dir
 | 401 | Authentication missing/invalid | AUTHENTICATION_REQUIRED |
 | 403 | Authenticated but wrong role/ownership/current assignment | ACCESS_DENIED, WORKER_NOT_ASSIGNED |
 | 404 | Resource does not exist | USER_NOT_FOUND, SPACE_NOT_FOUND, FACILITY_NOT_FOUND, REQUEST_NOT_FOUND, WORKER_NOT_FOUND, VISIT_NOT_FOUND, ATTACHMENT_NOT_FOUND |
-| 409 | Business state/concurrency conflict | INVALID_REQUEST_STATE, REQUEST_ALREADY_ASSIGNED, VERSION_CONFLICT |
+| 409 | Business state/concurrency conflict | INVALID_REQUEST_STATE, REQUEST_ALREADY_ASSIGNED, INVALID_FACILITY_STATE, VERSION_CONFLICT |
 
 INVALID_WORKER is also a representative frozen code; exact validation-vs-business-conflict mapping must be specified by assignment API review. Do not map every integrity constraint error to VERSION_CONFLICT.
 

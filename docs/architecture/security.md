@@ -10,6 +10,12 @@ Refresh token은 opaque random token으로 14일 동안 유효하다. `refresh_t
 
 Refresh token은 login response의 JSON body로 반환하고 refresh/logout 요청의 JSON body로 전달한다. V1 authentication에서는 cookie를 사용하지 않는다. `SUSPENDED`와 `WITHDRAWN` 사용자는 login과 refresh를 거부한다. 상세 persistence 결정은 [ADR-013](../adr/ADR-013-refresh-token-storage.md)을 따른다.
 
-Authorization은 authentication + role + ownership/current assignment/dormitory scope + current state를 application에서 검증한다. Entity binding mass assignment, 임의 status 변경, STAFF_ONLY 노출, former worker write를 허용하지 않는다. CORS는 명시적 origin/method/header만 사용하고 wildcard credential를 금지한다. Production은 HTTPS, trusted proxy, private RDS verify-full TLS, EC2 IAM role, Secret Manager/SSM을 사용하며 local `.env`는 Git에서 제외한다.
+Authorization은 authentication + role + ownership/current assignment/dormitory scope + current state를 application에서 검증한다. Dormitory/Building/Space 관리는 SUPER_ADMIN 전용이며, Facility는 해당 dormitory scope의 ADMIN 또는 SUPER_ADMIN만 관리할 수 있다. MaintenanceCategory는 V1 전역 Master Data이므로 SUPER_ADMIN 전용이다. 상위 비활성화는 하위로 전파하지 않지만 비활성 상위 아래 생성·재활성화는 차단하며, hard delete는 허용하지 않는다. Facility status는 allow-listed command로만 변경하고 `RETIRED`는 terminal이다. Category `parentId`는 생성 시에만 허용한다. Entity binding mass assignment, 임의 status 변경, STAFF_ONLY 노출, former worker write를 허용하지 않는다. CORS는 명시적 origin/method/header만 사용하고 wildcard credential를 금지한다. Production은 HTTPS, trusted proxy, private RDS verify-full TLS, EC2 IAM role, Secret Manager/SSM을 사용하며 local `.env`는 Git에서 제외한다.
 
 Log에는 password, token, consent, private comment, file content, presigned URL을 남기지 않는다. Error에는 SQL, stack trace, signing detail을 노출하지 않는다.
+# Residence authorization
+
+Residence administration is a room-derived Dormitory-scope decision: SUPER_ADMIN is global and
+ADMIN must hold the referenced room's Dormitory scope. Scope-less ADMIN has no Residence manage or
+list access, and list filtering must never disclose records outside scope. `/api/v1/me/residences`
+uses the authenticated subject only and requires the actual RESIDENT role; WORKER alone is denied.

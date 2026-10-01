@@ -1,6 +1,17 @@
 package com.dormfix;
 
+import com.dormfix.catalog.domain.Facility;
+import com.dormfix.catalog.domain.FacilityStatus;
+import com.dormfix.catalog.domain.MaintenanceCategory;
+import com.dormfix.catalog.domain.Priority;
 import com.dormfix.test.TestJwtKeys;
+import com.dormfix.location.domain.Building;
+import com.dormfix.location.domain.Dormitory;
+import com.dormfix.location.domain.Space;
+import com.dormfix.location.domain.SpaceType;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -12,8 +23,10 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.Rollback;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -40,11 +53,13 @@ class FoundationIntegrationTest {
     private Flyway flyway;
     @Autowired
     private JdbcTemplate jdbc;
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Test
     void migrationIsValidAndRepeatableStartupHasNoPendingMigration() {
         flyway.validate();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("2");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("5");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
     }
@@ -76,6 +91,87 @@ class FoundationIntegrationTest {
                 "pk_user_roles", "ix_user_roles_role",
                 "pk_refresh_token_sessions", "uq_refresh_token_sessions_token_hash",
                 "ix_refresh_token_sessions_user_id");
+    }
+
+    @Test
+    void dormitoryStructureMigrationCreatesExpectedSchemaObjects() {
+        assertThat(structureTableNames()).containsExactly(
+                "building", "dormitory", "facility", "maintenance_category", "space");
+        assertThat(columnNames("dormitory")).containsExactly(
+                "id", "name", "address", "timezone", "active", "created_at", "updated_at");
+        assertThat(columnNames("building")).containsExactly(
+                "id", "dormitory_id", "code", "name", "active", "created_at", "updated_at");
+        assertThat(columnNames("space")).containsExactly(
+                "id", "building_id", "code", "name", "type", "floor", "description", "active",
+                "created_at", "updated_at");
+        assertThat(columnNames("facility")).containsExactly(
+                "id", "space_id", "name", "facility_type", "asset_code", "status", "installed_at",
+                "description", "created_at", "updated_at");
+        assertThat(columnNames("maintenance_category")).containsExactly(
+                "id", "parent_id", "code", "name", "default_priority", "active", "sort_order",
+                "created_at", "updated_at");
+
+        assertThat(structureConstraintNames()).contains(
+                "pk_dormitory", "pk_building", "fk_building_dormitory", "uq_building_dormitory_code",
+                "pk_space", "fk_space_building", "uq_space_building_code", "ck_space_type",
+                "pk_facility", "fk_facility_space", "uq_facility_asset_code", "ck_facility_status",
+                "pk_maintenance_category", "fk_maintenance_category_parent",
+                "uq_maintenance_category_code", "ck_maintenance_category_not_self_parent",
+                "ck_maintenance_category_default_priority");
+        assertThat(structureIndexNames()).contains(
+                "pk_dormitory", "pk_building", "uq_building_dormitory_code", "pk_space",
+                "uq_space_building_code", "pk_facility", "uq_facility_asset_code", "ix_facility_space_id",
+                "pk_maintenance_category", "uq_maintenance_category_code",
+                "ix_maintenance_category_parent_id");
+    }
+
+    @Test
+    void administratorScopeMigrationCreatesExpectedSchemaObjects() {
+        assertThat(columnNames("admin_dormitory_scopes")).containsExactly("user_id", "dormitory_id");
+        assertThat(notNullColumnNames("admin_dormitory_scopes"))
+                .containsExactly("user_id", "dormitory_id");
+        assertThat(scopeConstraintNames()).contains(
+                "pk_admin_dormitory_scopes", "fk_admin_dormitory_scopes_user",
+                "fk_admin_dormitory_scopes_dormitory");
+        assertThat(scopeIndexNames()).contains(
+                "pk_admin_dormitory_scopes", "ix_admin_dormitory_scopes_dormitory_user");
+    }
+
+    @Test
+    @Transactional
+    @Rollback
+    void jpaModelsPersistWithV3SchemaAndStoreEnumsAsStrings() {
+        Instant now = Instant.parse("2026-09-16T00:00:00Z");
+        Dormitory dormitory = new Dormitory("North Dormitory", "1 Main Street", "Asia/Seoul",
+                true, now, now);
+        entityManager.persist(dormitory);
+        entityManager.flush();
+
+        Building building = new Building(dormitory.getId(), "N1", "North Building", true, now, now);
+        entityManager.persist(building);
+        entityManager.flush();
+
+        Space space = new Space(building.getId(), "101", "Room 101", SpaceType.ROOM, 1,
+                null, true, now, now);
+        entityManager.persist(space);
+        MaintenanceCategory category = new MaintenanceCategory(null, "PLUMBING", "Plumbing",
+                Priority.NORMAL, true, 1, now, now);
+        entityManager.persist(category);
+        entityManager.flush();
+
+        Facility facility = new Facility(space.getId(), "Sink", "PLUMBING", null,
+                FacilityStatus.ACTIVE, null, null, now, now);
+        entityManager.persist(facility);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(entityManager.find(Dormitory.class, dormitory.getId()).getTimezone())
+                .isEqualTo("Asia/Seoul");
+        assertThat(entityManager.find(Space.class, space.getId()).getType()).isEqualTo(SpaceType.ROOM);
+        assertThat(entityManager.find(Facility.class, facility.getId()).getStatus())
+                .isEqualTo(FacilityStatus.ACTIVE);
+        assertThat(entityManager.find(MaintenanceCategory.class, category.getId()).getDefaultPriority())
+                .isEqualTo(Priority.NORMAL);
     }
 
     @Test
@@ -146,6 +242,24 @@ class FoundationIntegrationTest {
     }
 
     @Test
+    void administratorScopeConstraintsRejectDuplicatesAndOrphans() {
+        long userId = insertUser(uniqueEmail(), null);
+        long dormitoryId = insertDormitory();
+        insertAdministratorScope(userId, dormitoryId);
+
+        assertThatThrownBy(() -> insertAdministratorScope(userId, dormitoryId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertAdministratorScope(Long.MAX_VALUE, dormitoryId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertAdministratorScope(userId, Long.MAX_VALUE))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbc.update("DELETE FROM app_user WHERE id = ?", userId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbc.update("DELETE FROM dormitory WHERE id = ?", dormitoryId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
     void safeHealthProbesWorkWithRealPostgres() {
         for (String probe : new String[] {"liveness", "readiness"}) {
             var response = http.getForEntity("/actuator/health/" + probe, Map.class);
@@ -169,6 +283,16 @@ class FoundationIntegrationTest {
                 FROM information_schema.tables
                 WHERE table_schema = 'public'
                   AND table_name IN ('app_user', 'user_roles', 'refresh_token_sessions')
+                ORDER BY table_name
+                """, String.class);
+    }
+
+    private List<String> structureTableNames() {
+        return jdbc.queryForList("""
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name IN ('dormitory', 'building', 'space', 'facility', 'maintenance_category')
                 ORDER BY table_name
                 """, String.class);
     }
@@ -209,6 +333,40 @@ class FoundationIntegrationTest {
                 """, String.class);
     }
 
+    private List<String> structureConstraintNames() {
+        return jdbc.queryForList("""
+                SELECT constraint_name
+                FROM information_schema.table_constraints
+                WHERE table_schema = 'public'
+                  AND table_name IN ('dormitory', 'building', 'space', 'facility', 'maintenance_category')
+                """, String.class);
+    }
+
+    private List<String> structureIndexNames() {
+        return jdbc.queryForList("""
+                SELECT indexname
+                FROM pg_indexes
+                WHERE schemaname = 'public'
+                  AND tablename IN ('dormitory', 'building', 'space', 'facility', 'maintenance_category')
+                """, String.class);
+    }
+
+    private List<String> scopeConstraintNames() {
+        return jdbc.queryForList("""
+                SELECT constraint_name
+                FROM information_schema.table_constraints
+                WHERE table_schema = 'public' AND table_name = 'admin_dormitory_scopes'
+                """, String.class);
+    }
+
+    private List<String> scopeIndexNames() {
+        return jdbc.queryForList("""
+                SELECT indexname
+                FROM pg_indexes
+                WHERE schemaname = 'public' AND tablename = 'admin_dormitory_scopes'
+                """, String.class);
+    }
+
     private long insertUser(String email, String studentNumber) {
         return jdbc.queryForObject("""
                 INSERT INTO app_user
@@ -223,6 +381,21 @@ class FoundationIntegrationTest {
                 INSERT INTO refresh_token_sessions (user_id, token_hash, expires_at, created_at)
                 VALUES (?, ?, CURRENT_TIMESTAMP + INTERVAL '14 days', CURRENT_TIMESTAMP)
                 """, userId, tokenHash);
+    }
+
+    private long insertDormitory() {
+        return jdbc.queryForObject("""
+                INSERT INTO dormitory (name, address, timezone, created_at, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                RETURNING id
+                """, Long.class, "Scope Dormitory", "1 Scope Street", "Asia/Seoul");
+    }
+
+    private void insertAdministratorScope(long userId, long dormitoryId) {
+        jdbc.update("""
+                INSERT INTO admin_dormitory_scopes (user_id, dormitory_id)
+                VALUES (?, ?)
+                """, userId, dormitoryId);
     }
 
     private String uniqueEmail() {
