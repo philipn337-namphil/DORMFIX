@@ -45,8 +45,19 @@ jobs:
         shell: bash
         run: |
           password=$(openssl rand -hex 24)
-          private_key=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null | openssl pkey -outform DER | base64 -w 0)
-          public_key=$(printf '%s' "$private_key" | base64 --decode | openssl pkey -inform DER -pubout -outform DER | base64 -w 0)
+          private_key=$(
+            openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null \
+              | openssl pkcs8 -topk8 -nocrypt -outform DER \
+              | base64 -w 0
+          )
+          public_key=$(
+            printf '%s' "$private_key" \
+              | base64 --decode \
+              | openssl pkey -inform DER -pubout -outform DER \
+              | base64 -w 0
+          )
+          printf '%s' "$private_key" | base64 --decode | openssl pkcs8 -inform DER -nocrypt -out /dev/null
+          printf '%s' "$public_key" | base64 --decode | openssl pkey -pubin -inform DER -noout
           echo "::add-mask::$password"
           echo "::add-mask::$private_key"
           echo "::add-mask::$public_key"
