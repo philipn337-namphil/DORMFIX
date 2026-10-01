@@ -247,7 +247,7 @@ RequestHistory examples: REQUEST_CREATED, STATUS_CHANGED, PRIORITY_CHANGED, CATE
 
 - Building UNIQUE(dormitory_id, code); Space UNIQUE(building_id, code).
 - User email and student_number unique; nullable unique values use PostgreSQL normal null semantics. Category code, request_number and attachment object_key unique. Facility asset_code unique when present.
-- Residence room_space must be ROOM; no resident has more than one concurrently active Residence; preserve historical records. Date boundary/overlap definition remains open.
+- Residence room_space must be an active ROOM below an active hierarchy at creation/end; preserve historical records. Its interval is `[start_date, end_date)`, where `end_date` is the first non-resident date. Creation produces only a current row (`end_date` NULL); historical closure is the explicit end command. No resident periods overlap; PostgreSQL daterange exclusion is the concurrency safeguard. Same ROOM concurrent residents are allowed because V1 has no capacity contract.
 - Categories may be hierarchical. Do not replace them with a hard-coded category enum.
 - MaintenanceRequest is the central aggregate with JPA @Version optimistic locking. Index access patterns: (status, created_at), (space_id, status), (reporter_id, created_at), (category_id, created_at), (priority, status).
 - MaintenanceAssignment has at most one active assignment per request, defined as unassigned_at IS NULL. Planned physical constraint: CREATE UNIQUE INDEX ux_assignment_active_request ON maintenance_assignment(request_id) WHERE unassigned_at IS NULL.

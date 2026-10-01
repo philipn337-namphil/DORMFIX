@@ -7,6 +7,12 @@ import com.dormfix.identity.application.SignupService;
 import com.dormfix.identity.application.LoginService;
 import com.dormfix.identity.application.CurrentUserService;
 import com.dormfix.identity.application.RefreshTokenService;
+import com.dormfix.location.application.DormitoryQueryService;
+import com.dormfix.location.application.AdminStructureCommandService;
+import com.dormfix.catalog.application.CatalogQueryService;
+import com.dormfix.catalog.application.AdminCatalogCommandService;
+import com.dormfix.location.application.ResidenceCommandService;
+import com.dormfix.location.application.ResidenceQueryService;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.junit.jupiter.api.Test;
@@ -35,6 +41,18 @@ class SecurityBoundaryTest {
     private CurrentUserService currentUserService;
     @MockitoBean
     private RefreshTokenService refreshTokenService;
+    @MockitoBean
+    private DormitoryQueryService dormitoryQueryService;
+    @MockitoBean
+    private AdminStructureCommandService adminStructureCommandService;
+    @MockitoBean
+    private CatalogQueryService catalogQueryService;
+    @MockitoBean
+    private AdminCatalogCommandService adminCatalogCommandService;
+    @MockitoBean
+    private ResidenceCommandService residenceCommandService;
+    @MockitoBean
+    private ResidenceQueryService residenceQueryService;
     @MockitoBean
     private JwtDecoder jwtDecoder;
     @MockitoBean

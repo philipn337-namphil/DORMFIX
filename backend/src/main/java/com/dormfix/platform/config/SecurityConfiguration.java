@@ -31,6 +31,12 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/me").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/me/residences").authenticated()
+                        .requestMatchers("/api/v1/admin/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/dormitories",
+                                "/api/v1/dormitories/*/buildings", "/api/v1/buildings/*/spaces",
+                                "/api/v1/spaces/*", "/api/v1/spaces/*/facilities", "/api/v1/categories")
+                        .authenticated()
                         .anyRequest().denyAll())
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationEntryPoint)
