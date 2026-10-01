@@ -41,12 +41,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Generate ephemeral local database password
+      - name: Generate ephemeral local-stack credentials
         shell: bash
         run: |
           password=$(openssl rand -hex 24)
+          private_key=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null | openssl pkey -outform DER | base64 -w 0)
+          public_key=$(printf '%s' "$private_key" | base64 --decode | openssl pkey -inform DER -pubout -outform DER | base64 -w 0)
           echo "::add-mask::$password"
+          echo "::add-mask::$private_key"
+          echo "::add-mask::$public_key"
           echo "POSTGRES_PASSWORD=$password" >> "$GITHUB_ENV"
+          echo "DORMFIX_SECURITY_JWT_ISSUER=https://ci.dormfix.local" >> "$GITHUB_ENV"
+          echo "DORMFIX_SECURITY_JWT_AUDIENCE=dormfix-ci" >> "$GITHUB_ENV"
+          echo "DORMFIX_SECURITY_JWT_KEY_ID=ci-ephemeral-rsa" >> "$GITHUB_ENV"
+          echo "DORMFIX_SECURITY_JWT_PUBLIC_KEY_BASE64=$public_key" >> "$GITHUB_ENV"
+          echo "DORMFIX_SECURITY_JWT_PRIVATE_KEY_BASE64=$private_key" >> "$GITHUB_ENV"
       - name: Validate and start local stack
         run: |
           docker compose config --quiet
