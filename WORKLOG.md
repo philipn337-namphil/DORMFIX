@@ -1,5 +1,86 @@
 # DormFix 작업 로그
 
+## 2026-10-06 - MaintenanceRequest creation vertical slice completion follow-up
+
+- Completed the ADR-019 create slice currently present on `feature/create-maintenance-request`:
+  V6 adds `maintenance_request` and append-only `request_history`, including enum checks,
+  referential constraints, request/history lookup indexes, and the `REQUEST_CREATED` event check.
+- The maintenance API/application/domain/infrastructure packages provide only
+  `POST /api/v1/maintenance-requests`.  The service owns one transaction: it verifies the JWT
+  RESIDENT role, current active Residence ROOM and active location hierarchy, category state and
+  facility-space/state rules; allocates the identity, assigns `DF-<id>`, and stores exactly one
+  `REQUEST_CREATED` history row. `OUT_OF_SERVICE` is accepted and `RETIRED` is rejected.
+- Added typed 400 mapping for invalid entry policy and invalid preferred time, standard trace IDs
+  in feature errors, Clock-based current-residence/time handling, and a SecurityBoundary MVC mock
+  for the newly registered controller dependency. Existing domain and Testcontainers API tests
+  cover the supplied success, authorization/conflict, facility-state, missing-resource and
+  malformed-entry-policy paths.
+- Verification: `compileJava compileTestJava` completed successfully before the final MVC-test
+  mock adjustment; `checkstyleMain checkstyleTest` produced no Checkstyle errors. The initial
+  `check bootJar` executed 44 tests and found only the missing MVC mock (now fixed). The targeted
+  rerun could not compile because Windows denied access to the pre-existing Gradle cache JAR
+  `spring-security-oauth2-resource-server-6.5.11.jar`; it is an environment/cache access failure,
+  not a passing gate. `check bootJar`, `integrationTest`, and repository guard remain required.
+- No commit or push was performed. Remaining product scope is intentionally unchanged: request
+  reads/listing/PATCH, assignment, lifecycle transitions, visits, attachments and comments are
+  not implemented.
+
+## 2026-10-02 - MaintenanceRequest creation vertical slice
+
+- Implemented the approved ADR-019 create slice only: V6 creates `maintenance_request` and
+  append-only `request_history`; the new maintenance feature owns the request/history aggregates,
+  boundary ports/adapters, and `POST /api/v1/maintenance-requests`.
+- Creation is one transaction: validate RESIDENT/current Residence ROOM and active references,
+  allocate the request ID, set `DF-<id>`, and append exactly one `REQUEST_CREATED` history row.
+  Category default priority and initial `REPORTED` status are server-owned. Facility space mismatch
+  and RETIRED state return `409 INVALID_REQUEST_STATE`; OUT_OF_SERVICE remains allowed.
+- Added a domain unit test and PostgreSQL Testcontainers API regression coverage for successful
+  creation/history, role/current-residence/facility conflicts, OUT_OF_SERVICE acceptance, missing
+  references, and malformed EntryPolicy. Listing/detail/PATCH, assignment, lifecycle commands,
+  visits, attachments, and comments remain unimplemented.
+- Verification so far: `compileJava` passed and `git diff --check` passed. Gradle test tasks were
+  attempted but did not return a completion status in the execution window after compiling test
+  classes; `gradlew --stop` reported no running daemon. Full `check bootJar` and `integrationTest`
+  remain to be run to completion.
+- No commit or push was performed.
+
+## 2026-10-02 - ADR-019 V1 approval and Frozen contract synchronization
+
+- Human approval accepted ADR-019. V1 reporting is limited to an authenticated RESIDENT's current
+  Residence ROOM; common-area and another resident's room reporting are not supported. A supplied
+  `OUT_OF_SERVICE` Facility remains reportable, a `RETIRED` Facility is denied, and the public
+  request number is the server-generated `DF-<id>` value.
+- Synchronized the exact create DTO, server-owned initial values, reference checks, preferred-time
+  rule, response, 400/404/409 semantics, and atomic `REQUEST_CREATED` RequestHistory row into the
+  Frozen API, permission matrix, and ERD. Q03 is resolved and ADR-019 is Accepted.
+- No Java source, test, Flyway migration, build file, commit, or push was changed.
+- Changed files: `docs/adr/ADR-019-maintenance-request-creation-contract.md`,
+  `docs/adr/README.md`, `docs/architecture/open-questions.md`,
+  `docs/product/api-spec-v1.md`, `docs/product/permission-state-matrix-v1.md`,
+  `docs/product/erd-v1.md`, `PROJECT_CONTEXT.md`, `WORKLOG.md`, and the Frozen hash manifest.
+- Verification: `python scripts/check_repository.py`, `python scripts/test_check_repository.py`,
+  and `git diff --check` passed. `backend` `gradlew check bootJar` could not start because the
+  pre-existing modified `backend/build.gradle` begins with non-Gradle text and fails parsing at
+  line 1; Gradle also reported denied access to its existing problems report. `integrationTest`
+  was not run because it uses the same broken build script.
+- Next: implement the request-create vertical slice only in a separately requested change; it must
+  follow ADR-019 and preserve the create transaction's RequestHistory row.
+
+## 2026-10-02 - Phase 3 create-request contract proposal
+
+- Phase 2 merge commit `7e1d717`을 기준으로 `feature/create-maintenance-request`를 생성했다.
+- Frozen V1가 `POST /maintenance-requests`의 DTO, reportable Space authorization,
+  reference state, request-number, preferred-time, and initial-history semantics를 정하지
+  않은 것을 확인했다. 추측 구현을 피하기 위해 Proposed ADR-019와 open question Q03을
+  추가했다.
+- ADR-019는 RESIDENT current-residence room reporting, server-owned `REPORTED` status와
+  category default priority, `DF-<id>` request number, retired facility denial / out-of-service
+  facility reporting, preferred-time range, 그리고 atomic `REQUEST_CREATED` history를
+  제안한다.
+- No Java, Flyway, Frozen product document, frozen hash, test, commit, or push was changed.
+- Next: human approval or revision of ADR-019; only then synchronize Frozen documents and
+  implement the request-create vertical slice.
+
 ## 2026-10-01 - Phase 2 final quality gate passed
 
 - Final Residence pageable-query review fixed PostgreSQL native SQL date casting and prevented
@@ -228,3 +309,37 @@
 - 2026-09-18: implemented `DormitoryScopeResolutionService` for Space → Building → Dormitory and Facility → Space → Building → Dormitory resolution, delegating resolved IDs to existing scope authorization. Added Facility ID lookup port/adapter, `FACILITY_NOT_FOUND` mapping, unit coverage for path/delegation/404, and PostgreSQL integration coverage for 403/404. Admin Controller/CRUD remains unimplemented.
 - 2026-09-18 verification: resolved the initial ArchUnit catalog/location cycle by introducing the narrow `FacilityScopeLookup` application port and catalog infrastructure adapter. Full unit tests, ArchitectureTest, Checkstyle, targeted and full PostgreSQL integrationTest passed.
 - 2026-09-23: implemented ADR-016 Admin write APIs for Dormitory, Building, and Space only. Added create, metadata PATCH, explicit deactivate, and explicit reactivate commands; all require SUPER_ADMIN at the Security and application boundaries. PATCH DTOs are allow-listed and reject direct `active` changes. Creation/reactivation below inactive parents returns 409 `INACTIVE_PARENT`; parent deactivation does not cascade. Added unit tests and PostgreSQL Testcontainers API coverage for authorization, lifecycle commands, active-field protection, and inactive-parent conflicts. Unit/API compilation, ArchitectureTest, and Checkstyle passed. PostgreSQL integrationTest compiled but could not run because Docker daemon was unavailable in the environment.
+
+## 2026-10-07 - MaintenanceRequest creation quality-gate handoff
+
+- Ran the requested gate sequence on `feature/create-maintenance-request` without deleting Gradle caches or build outputs. With the repository-local JDK 21 and Gradle home, `gradlew --stop` completed (`No Gradle daemons are running`), `python scripts/check_repository.py` passed, and `git diff --check` passed (only existing LF/CRLF warnings). `check bootJar --no-daemon --console=plain` passed before the follow-up fix.
+- The first `integrationTest` attempt failed before test execution because Docker Desktop was stopped; all 15 suites reported Testcontainers `initializationError`. Docker Desktop was started, `docker version` then confirmed the `desktop-linux` engine, and the full integration suite was rerun.
+- The Docker-backed rerun executed 15 suites / 43 tests. Only `MaintenanceRequestCreationIntegrationTest` had failures: 2 failures, 0 errors, 0 skipped. Both successful-create assertions received the downstream 403/500 response caused by `maintenance_request.request_number` being NULL on the first IDENTITY insert; the log records PostgreSQL SQLState 23502 and the failing `saveAndFlush` at `MaintenanceRequestCreationService.java:84`.
+- Minimal code fix applied, without changing V6 or any migration: `MaintenanceRequest` now uses the existing PostgreSQL identity backing sequence via JPA `SEQUENCE` allocation; `MaintenanceRequestRepository` exposes concrete `save`; creation saves to allocate the ID, assigns `DF-<id>`, then flushes. Changed files: `backend/src/main/java/com/dormfix/maintenance/domain/MaintenanceRequest.java`, `backend/src/main/java/com/dormfix/maintenance/application/MaintenanceRequestRepository.java`, and `backend/src/main/java/com/dormfix/maintenance/application/MaintenanceRequestCreationService.java`.
+- Post-fix targeted integration-test compilation was blocked by a recurring Windows access denial for the pre-existing Gradle cache file `C:\Users\phili\Desktop\DORMFIX\.tools\gradle-home\caches\modules-2\files-2.1\org.springframework.security\spring-security-oauth2-resource-server\6.5.11\7f28ddc2ffb134af69da3f9efb3e27ac1e50db4f\spring-security-oauth2-resource-server-6.5.11.jar`. Per request, do not delete/repair the cache or kill unknown processes; next continuation should diagnose the locking process/file only, then resume the gate if the environment is clear.
+- No commit, push, reset, checkout, cache deletion, or build-result deletion was performed. Remaining work: diagnose the JAR lock, update this log with the result, then rerun the complete requested sequence from `gradlew --stop` through the full `integrationTest` and record final suite/test/failure/error/skip totals.
+
+## 2026-10-07 - MaintenanceRequest creation quality gate completed
+
+- Resumed from the handoff above. The reported resource-server JAR access denial was diagnosed read-only: no Java/Gradle process was running, `exclusive-read-open` on the exact JAR succeeded, ACLs grant the user and `CodexSandboxUsers` Modify access, and `openfiles /query` could not enumerate handles because system open-file tracking requires elevation. No cache file was deleted or repaired; Gradle was run in an authorized context thereafter.
+- The first post-fix attempt using JPA `SEQUENCE` was rejected by Hibernate schema validation because V6 creates an identity column but no separately visible `maintenance_request_id_seq`. That mapping was reverted. Final minimal fix keeps `GenerationType.IDENTITY`, initializes a private 30-character pending request number for the first NOT NULL insert, and replaces it with `DF-<id>` in the same transaction before the final flush. No migration was changed.
+- Targeted `MaintenanceRequestCreationIntegrationTest` passed all 3 tests after the final fix.
+- Final requested sequence passed in order: `gradlew --stop` (no daemons), `python scripts/check_repository.py`, `git diff --check`, `check bootJar --no-daemon --console=plain`, and full `integrationTest --no-daemon --console=plain`.
+- Final integrationTest XML aggregation: 15 suites, 43 tests, 0 failures, 0 errors, 0 skipped. The maintenance creation suite contributed 3/3 passing tests. Docker-backed PostgreSQL ran successfully.
+- No commit, push, reset, checkout, cache deletion, or build-result deletion was performed. Remaining product scope is unchanged and no next feature was implemented.
+
+## 2026-10-07 - MaintenanceRequest creation contract review
+
+- Reviewed the create slice against ADR-019, Frozen API/permission/ERD, AGENTS.md, and the current tests without changing Java or Flyway code.
+- Finding: `MaintenanceRequestExceptionHandler.code()` maps `BuildingNotFoundException` and `DormitoryNotFoundException` to the fallback `SPACE_NOT_FOUND`; the existing structure contract uses `BUILDING_NOT_FOUND` and `DORMITORY_NOT_FOUND`. This is a Frozen API error-code mismatch and should be fixed before commit.
+- Finding: the current tests do not cover the missing-building/missing-dormitory error codes, invalid preferred-time pairs, inactive hierarchy/category, malformed/unknown fields, missing category/facility references, or rollback when the RequestHistory insert fails. The successful test verifies one history row but does not prove rollback atomicity.
+- Review notes: the application command is one `@Transactional` service operation; the request and one `REQUEST_CREATED` history save share that transaction; no history delete/update API or entity mutator exists; the controller does not access repositories or own transactions; V6 is Flyway-managed with the expected FK/check/index constraints. The pending private request number is replaced with `DF-<id>` before transaction commit, but it causes two flushes and temporarily stores a non-public placeholder, so this remains a design risk to document or cover.
+
+## 2026-10-07 - MaintenanceRequest creation review fixes and quality gate
+
+- Mapped `BuildingNotFoundException` and `DormitoryNotFoundException` to the frozen `BUILDING_NOT_FOUND` and `DORMITORY_NOT_FOUND` error codes.
+- Added regression coverage for missing category/facility (404), inactive hierarchy/category (409), invalid preferred visit times and unknown JSON fields (400), and the representative building/dormitory handler mappings.
+- Added a PostgreSQL integration regression proving a `RequestHistory` save failure rolls back the newly created `MaintenanceRequest` in the same transaction. The endpoint returns an error and neither operational row nor history row remains.
+- Documented why the temporary `P-...` request number is transaction-private while the IDENTITY key is allocated, and expanded the successful-create assertion to prove the API exposes only the final `DF-<id>` value.
+- Full quality gate passed in order: `gradlew --stop`, repository guard, `git diff --check`, `check bootJar --no-daemon --console=plain`, and `integrationTest --no-daemon --console=plain`.
+- Final integrationTest aggregation: 15 suites, 47 tests, 0 failures, 0 errors, 0 skipped. No cache/build output was deleted; no commit or push was performed.

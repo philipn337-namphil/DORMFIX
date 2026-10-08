@@ -13,6 +13,7 @@ import com.dormfix.catalog.application.CatalogQueryService;
 import com.dormfix.catalog.application.AdminCatalogCommandService;
 import com.dormfix.location.application.ResidenceCommandService;
 import com.dormfix.location.application.ResidenceQueryService;
+import com.dormfix.maintenance.application.MaintenanceRequestCreationService;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.junit.jupiter.api.Test;
@@ -53,6 +54,8 @@ class SecurityBoundaryTest {
     private ResidenceCommandService residenceCommandService;
     @MockitoBean
     private ResidenceQueryService residenceQueryService;
+    @MockitoBean
+    private MaintenanceRequestCreationService maintenanceRequestCreationService;
     @MockitoBean
     private JwtDecoder jwtDecoder;
     @MockitoBean
