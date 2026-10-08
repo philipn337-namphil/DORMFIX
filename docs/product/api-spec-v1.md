@@ -56,6 +56,31 @@ All paths below include the base. `{id}` identifies a request unless another nam
 | POST | /notifications/read-all | Mark own notifications read |
 | GET | /notifications/unread-count | Own unread count |
 
+### Maintenance request creation
+
+`POST /maintenance-requests` is an authenticated `RESIDENT`-only command. Its request DTO is
+exactly `CreateMaintenanceRequest(spaceId, facilityId?, categoryId, title, description,
+entryPolicy, contactBeforeEntry, preferredVisitStart?, preferredVisitEnd?)`. It never accepts
+`reporterId`, `status`, `priority`, `duplicateOfId`, lifecycle timestamps, or `version`.
+`reporterId` is always the JWT subject.
+
+`spaceId` must be the caller's current Residence ROOM; V1 does not permit a resident to report a
+common area or another resident's room. The Space and its Building/Dormitory hierarchy, and the
+category, must be active. When supplied, `facilityId` must belong to `spaceId` and cannot be
+`RETIRED`; an `OUT_OF_SERVICE` facility remains reportable. The server sets `status=REPORTED`,
+`priority=category.defaultPriority`, `duplicateOfId=null`, timestamps, and the initial version.
+
+Preferred visit timestamps are both absent or both present, and when present
+`preferredVisitStart < preferredVisitEnd`; they are a preference, not a scheduled Visit. After
+the database ID is allocated, the server sets the stable public `requestNumber` to `DF-<id>`.
+Creation returns `201 Created`, `Location: /api/v1/maintenance-requests/{id}`, and the normal
+request response including `id`, `requestNumber`, `status`, `priority`, and `version`.
+
+Malformed input, an invalid `EntryPolicy`, or an invalid preferred-time range is `400`. A missing
+referenced resource is `404`. A Space outside the caller's current Residence, inactive Space
+hierarchy/category, a facility outside the submitted Space, or a retired facility is `409
+INVALID_REQUEST_STATE`.
+
 ### Structure administration
 
 All structure-management paths use the `/admin` prefix. These endpoints are part of the frozen contract but are not implemented yet.

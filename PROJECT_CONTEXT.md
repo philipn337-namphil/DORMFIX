@@ -15,6 +15,10 @@ DormFix는 기숙사 시설 문제를 `REPORT → ASSIGN → VISIT → REPAIR �
 - Phase 2는 V3/V4/V5 Flyway migration, 구조 read/write API, Facility/Category lifecycle, Dormitory scope authorization, Residence history/query API와 PostgreSQL exclusion protection을 포함해 완료했다. Phase 3는 이 구조 ID와 authorization boundary를 소비해야 한다.
 - 현재 다음 작업 위치: ADR-016에 따라 확정된 Admin API 계약을 기준으로 Dormitory/Building/Space/Facility/MaintenanceCategory 관리 API를 구현한다. 이번 계약 확정 작업에서는 Java Controller/Application Service를 구현하지 않는다.
 - Product V1 계약은 `docs/product/`에 frozen 상태로 관리한다.
+- ADR-019가 승인되어 MaintenanceRequest 생성은 RESIDENT의 current Residence ROOM으로
+  한정된다. `OUT_OF_SERVICE` Facility는 신고 가능하고 `RETIRED` Facility는 불가하며,
+  public request number는 `DF-<id>`다. Java/Flyway request-create 구현은 아직 시작하지
+  않았다.
 - 아키텍처는 명시적이고 테스트 가능한 Java modular monolith를 따른다.
 - 백엔드는 package-by-feature 구조의 API → application → domain 흐름을 따른다.
 - 인프라는 boundary port를 구현하며, Controller가 repository나 EntityManager에 직접 접근하거나 transaction을 소유하지 않는다.

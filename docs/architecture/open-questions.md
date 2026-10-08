@@ -4,6 +4,23 @@
 
 각 질문은 소유 feature slice에서 evidence와 함께 검토하고, 필요하면 proposed ADR로 올린다. 승인 전에는 기존 state, permission, ERD, API semantics를 유지한다.
 
+## Resolved MaintenanceRequest creation contract
+
+2026-10-02 human approval으로 [ADR-019](../adr/ADR-019-maintenance-request-creation-contract.md)의
+V1 신고 생성 계약을 확정했다.
+
+- 신고자는 authenticated `RESIDENT`이며 `reporterId`는 JWT subject만 사용한다.
+- 신고 대상은 신고자의 current Residence에 있는 ROOM뿐이다. 공용공간과 타인의 방은 V1
+  신고 대상이 아니다.
+- supplied Facility는 해당 Space에 속해야 하고 `RETIRED`일 수 없다. `OUT_OF_SERVICE`
+  Facility는 그 상태 자체를 신고할 수 있으므로 허용한다.
+- public request number는 저장 후 할당된 ID를 사용한 안정적인 `DF-<id>` 형식이다.
+- 전체 DTO, reference-state, server-owned initial values, preferred time, response, error,
+  and `REQUEST_CREATED` history semantics are in the Frozen product contract.
+
+이 결정은 후속 request-create slice의 계약 기준이다. Java aggregate, API endpoint, V6
+migration은 이 승인 작업에서 구현하지 않는다.
+
 ## Resolved authentication decisions
 
 2026-09-11 human decision으로 Authentication Phase 1의 다음 항목을 확정했다. 상세 refresh-token 결정은 [ADR-013](../adr/ADR-013-refresh-token-storage.md)에 기록한다.

@@ -19,7 +19,7 @@ CLOSED, REJECTED, DUPLICATE는 terminal이다. 다른 transition은 허용하지
 
 ## Role별 규칙
 
-- RESIDENT: 본인 request 생성/조회, REPORTED에서만 수정, 본인 active request에 PUBLIC comment와 허용 attachment 추가, visit schedule 조회, RESOLVED request close/reopen. status, priority, reporter, assignment를 직접 지정하지 않는다. STAFF_ONLY comment는 보지 못한다.
+- RESIDENT: 본인 request 생성/조회, REPORTED에서만 수정, 본인 active request에 PUBLIC comment와 허용 attachment 추가, visit schedule 조회, RESOLVED request close/reopen. 신고 생성은 본인의 current Residence ROOM에만 가능하며 공용공간이나 다른 resident의 ROOM은 신고하지 않는다. `OUT_OF_SERVICE` Facility는 신고할 수 있지만 `RETIRED` Facility는 신고할 수 없다. status, priority, reporter, assignment를 직접 지정하지 않는다. STAFF_ONLY comment는 보지 못한다.
 - WORKER: current active assignee만 start/hold/resume/resolve, valid state의 visit 관리, WorkLog, PUBLIC/STAFF_ONLY comment, repair attachment를 작성한다. Former worker는 historical read-only만 가능하다.
 - ADMIN: dormitory scope의 전체 request 조회, active request의 허용된 category/priority/location 조정, assign/reassign, REPORTED reject/duplicate, visit 관리, RESOLVED close/reopen, scope 내 Facility 관리와 Facility status command 수행. Resident entry consent를 대신 변경하지 않으며 MaintenanceCategory를 관리하지 않는다.
 - SUPER_ADMIN: ADMIN 기능과 전체 Dormitory/Building/Space/Facility, user-role 및 전역 system/master-data 관리를 가진다. MaintenanceCategory는 V1 전역 Master Data이므로 SUPER_ADMIN 전용이다. 모든 domain state rule은 동일하게 적용된다.
