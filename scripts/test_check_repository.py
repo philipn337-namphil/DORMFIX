@@ -56,6 +56,12 @@ class RepositoryGuardTest(unittest.TestCase):
                         encoding="utf-8")
         self.assertTrue(any("CI gate missing" in error for error in check(self.root)))
 
+    def test_registry_publish_gate_removal_is_rejected(self):
+        path = self.root / ".github/workflows/ci.yml"
+        path.write_text(path.read_text(encoding="utf-8").replace("docker/build-push-action@", "removed/"),
+                        encoding="utf-8")
+        self.assertTrue(any("CI gate missing" in error for error in check(self.root)))
+
     def test_wrapper_tampering_is_rejected(self):
         (self.root / "backend/gradle/wrapper/gradle-wrapper.jar").write_bytes(b"not the wrapper")
         self.assertTrue(any("wrapper JAR differs" in error for error in check(self.root)))

@@ -1,5 +1,28 @@
 # DormFix 작업 로그
 
+## 2026-10-08 - Docker Hub image publication workflow
+
+- Added a gated Docker Hub publish job to the existing CI workflow. It runs only for pushes to
+  `main`, waits for the Java/PostgreSQL and local Docker smoke jobs, then publishes
+  `namphil/dormfix:latest` and the immutable `sha-<full-commit-sha>` tag.
+- Docker Hub authentication uses only the repository secret `DOCKERHUB_TOKEN`; no credential or
+  token value is stored in the repository. The login scope is limited to pushing
+  `namphil/dormfix` through Buildx.
+- The publish step records the resulting image digest and emits provenance and SBOM attestations.
+  Production deployment remains intentionally separate and must pin the digest or SHA tag rather
+  than `latest`.
+- Updated the CI/CD guide and repository guard so removal of the registry publication controls is
+  detected.
+- Verification passed: GitHub Actions YAML parsing, `python scripts/check_repository.py`, all 8
+  repository-guard regression tests, `git diff --check`, and a local
+  `docker build --tag dormfix:dockerhub-workflow-validation backend`. The container build ran the
+  embedded Gradle `check bootJar` successfully.
+- Created the public Docker Hub repository `namphil/dormfix`. Confirmed that an existing active
+  Read & Write personal access token named `github-actions-dormfix` and the GitHub Actions
+  repository secret `DOCKERHUB_TOKEN` are present. No secret value was read, exposed, or changed.
+- Remaining activation step: review and merge this branch to `main`, then verify the first publish
+  run and the resulting Docker Hub tags/digest.
+
 ## 2026-10-01 - Phase 2 final quality gate passed
 
 - Final Residence pageable-query review fixed PostgreSQL native SQL date casting and prevented

@@ -98,7 +98,9 @@ def check(root=ROOT):
     if workflow.is_file():
         content = workflow.read_text(encoding="utf-8")
         for required in ("scripts/check_repository.py", "check bootJar integrationTest",
-                         "docker compose config --quiet", "contents: read"):
+                         "docker compose config --quiet", "contents: read",
+                         "docker/login-action@", "docker/build-push-action@",
+                         "secrets.DOCKERHUB_TOKEN", "namphil/dormfix", "push: true"):
             if required not in content:
                 errors.append(f"CI gate missing: {required}")
         if "pull_request_target:" in content:
