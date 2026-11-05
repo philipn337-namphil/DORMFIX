@@ -44,7 +44,8 @@ public class DormitoryScopeResolutionService {
         authorization.requireManageAccess(userId, roles, resolveDormitoryIdForFacility(facilityId));
     }
 
-    private Long resolveDormitoryIdForBuilding(Long buildingId) {
+    @Transactional(readOnly = true)
+    public Long resolveDormitoryIdForBuilding(Long buildingId) {
         var building = buildings.findById(buildingId)
                 .orElseThrow(() -> new BuildingNotFoundException(buildingId));
         return building.getDormitoryId();

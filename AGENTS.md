@@ -37,6 +37,23 @@ Read this file, scoped AGENTS files, existing code/tests, and relevant docs befo
 - Secrets come from environment/secret stores. Never commit credentials or log passwords, tokens, consent, private comments, file contents, or presigned URLs. No permissive auth shortcuts or wildcard credentialed CORS.
 - Use the frozen 400/401/403/404/409 meanings and standard error contract. Do not turn access denial into a state conflict or leak exception internals.
 
+## 코드 리뷰에서 확정된 구현 규칙
+
+2026-11-04 신고생성 슬라이스(`7e1d717..66f628c`) 리뷰에서 확정한 규칙이다. 신규 코드는 아래를 지키고,
+기존 위반은 `WORKLOG.md`의 deferred 리뷰 목록에서 일괄 처리한다.
+
+- 요청 DTO의 필수 boolean은 primitive `boolean`이 아니라 `@NotNull Boolean`을 쓴다. primitive는 필드 누락을
+  400이 아니라 `false`로 조용히 통과시킨다.
+- 요청 DTO의 모든 문자열 필드에는 `@Size` 상한을 둔다. 상한 없는 필드는 DB TEXT에 무제한 저장된다.
+- feature별 `@RestControllerAdvice`에는 `DataIntegrityViolationException`과 예상 외 예외를 받는 fallback
+  핸들러를 둔다. Frozen 표준 에러(`code`, `traceId`, `fieldErrors`)를 우회해 Spring 기본 본문이 나가면 계약 위반이다.
+- `code()`류 예외→코드 매핑에는 추측성 기본값을 두지 않는다. 미지의 예외 타입은 명시적으로 내부 오류로 떨어뜨린다.
+- 인가(소유권/스코프/역할) 검사를 존재·활성 검사보다 **먼저** 수행한다. 순서를 뒤집으면 conflict 메시지로
+  타인 리소스의 존재와 상태가 열거된다. conflict 메시지에 조회 대상 식별자나 상태를 그대로 담지 않는다.
+- 외부 입력에서 온 문자열을 `ZoneId.of`, `Enum.valueOf` 등 던지는 파서에 직접 넣지 않는다. 저장 시점에
+  검증하고, 소비 시점에서도 실패를 계약된 4xx로 매핑한다.
+- 계층 탐색·활성 검사 같은 공통 규칙은 feature마다 복제하지 않고 기존 서비스/포트를 재사용한다.
+
 ## Scope, 변경, Git
 
 Inspect `git status`, branch, diff, and existing tests first. Use vertical `feature/<use-case>` branches, `fix/<issue>`, `docs/<topic>`, or `chore/<foundation-topic>`. No feature work on main, layer branches, unrelated edits, automatic pushes, real cloud provisioning, production deployment, global machine changes, or destructive cleanup without explicit authorization. Never overwrite user work. No full V1 implementation in a foundation task.

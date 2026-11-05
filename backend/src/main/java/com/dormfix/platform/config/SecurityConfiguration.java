@@ -33,6 +33,20 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/v1/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/me/residences").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/v1/maintenance-requests").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/maintenance-requests",
+                                "/api/v1/maintenance-requests/assigned-to-me",
+                                "/api/v1/maintenance-requests/*")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/maintenance-requests/*/assignments",
+                                "/api/v1/maintenance-requests/*/start",
+                                "/api/v1/maintenance-requests/*/hold",
+                                "/api/v1/maintenance-requests/*/resume",
+                                "/api/v1/maintenance-requests/*/resolve",
+                                "/api/v1/maintenance-requests/*/close",
+                                "/api/v1/maintenance-requests/*/reopen",
+                                "/api/v1/maintenance-requests/*/reject",
+                                "/api/v1/maintenance-requests/*/mark-duplicate")
+                        .authenticated()
                         .requestMatchers("/api/v1/admin/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/dormitories",
                                 "/api/v1/dormitories/*/buildings", "/api/v1/buildings/*/spaces",

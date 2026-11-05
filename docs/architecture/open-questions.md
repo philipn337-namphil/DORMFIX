@@ -4,6 +4,74 @@
 
 각 질문은 소유 feature slice에서 evidence와 함께 검토하고, 필요하면 proposed ADR로 올린다. 승인 전에는 기존 state, permission, ERD, API semantics를 유지한다.
 
+## Resolved MaintenanceRequest lifecycle command contract
+
+2026-11-04 human approval으로 [ADR-022](../adr/ADR-022-maintenance-request-lifecycle-command-contract.md)의
+V1 lifecycle command 계약을 확정했다. Q06은 resolved 되었다. ERD가 열어둔 duplicate 정책과 command
+DTO 수준의 공백이 아래로 닫혔다.
+
+- Command DTO는 `LifecycleCommandRequest(statusReason?, version)`이고 `hold`와 `reject`는
+  `statusReason`을 필수로 받는다. `mark-duplicate`는 `duplicateOfId`를 추가로 받는다.
+- `status_reason`은 현재 status의 투영이며 매 transition마다 덮어쓰거나 null로 지운다. 누적 audit은
+  append-only RequestHistory가 담당한다.
+- `resolve`가 `resolved_at`, `close`가 `closed_at`을 쓴다. `reopen`은 `resolved_at`을 지우고
+  `closed_at`은 건드리지 않는다.
+- `duplicateOfId`의 대상은 존재하고 actor에게 보여야 하며, 아니면 `404 REQUEST_NOT_FOUND`다.
+  자기 참조와 `DUPLICATE` 대상은 `409 INVALID_REQUEST_STATE`다. V1은 duplicate chain을 허용하지
+  않는다.
+- `close`/`reject`/`mark-duplicate`는 active assignment를 종료한다. `resolve`는 종료하지 않으며,
+  `reopen`은 active assignment가 없으면 `409 INVALID_REQUEST_STATE`다.
+- WORKER role이지만 current active assignee가 아닌 caller는 `403 WORKER_NOT_ASSIGNED`,
+  해당 command를 쓸 수 없는 role은 `403 ACCESS_DENIED`다.
+- 8개 event type을 추가하며 V8이 `ck_request_history_event_type`을 다시 교체한다.
+
+전체 DTO, reason 요구사항, timestamp 정책, duplicate 규칙, 종료 전이의 assignment 처리, reopen
+전제조건, 403 코드 분리, event type은 Frozen API specification과 permission matrix에, V8 물리
+규칙은 ERD에 동기화되어 있다.
+
+## Resolved MaintenanceRequest assignment contract
+
+2026-11-04 human approval으로 [ADR-021](../adr/ADR-021-maintenance-request-assignment-contract.md)의
+V1 배정 계약을 확정했다. Q05는 resolved 되었다. Frozen API가 미뤄둔
+"exact validation-vs-business-conflict mapping"이 아래로 확정되었다.
+
+- Command DTO `AssignWorkerRequest(workerId, reason?, version)`, `assignedById`는 JWT subject.
+- 대상 worker 미존재는 `404 WORKER_NOT_FOUND`, WORKER role이 아니거나 ACTIVE가 아니면
+  `409 INVALID_WORKER`. 생성 slice가 이미 reference state를 409로 매핑하는 선례를 따른다.
+- 현재 active assignee에게 재배정하면 `409 REQUEST_ALREADY_ASSIGNED`.
+  `ux_assignment_active_request` 경합도 같은 코드이며 `VERSION_CONFLICT`로 접지 않는다.
+- `VERSION_CONFLICT`는 stale `version`과 request row optimistic locking 실패에만 쓴다.
+- History event type을 `REQUEST_ASSIGNED`/`REQUEST_REASSIGNED`로 분리한다. V6의
+  `ck_request_history_event_type`이 `REQUEST_CREATED`만 허용하므로 V7에서 교체해야 한다.
+- Worker의 dormitory 제약은 V1에 두지 않는다. ADR-014가 scope row를 administrator로 한정했고
+  worker-dormitory mapping table이 없다.
+- `assigneeId`는 active assignment의 `worker_id`이며 denormalized column을 두지 않는다.
+
+이 결정은 Accepted ADR-020의 구현 선행 조건이다. ADR-020의 WORKER 가시성, `assigned-to-me`,
+`assigneeId` filter/field는 assignment row가 없으면 구현할 수 없고 V6에는 해당 테이블이 없으므로,
+배정 slice와 조회 slice를 한 번에 구현한다. 전체 DTO와 error 의미는 Frozen API specification과
+permission matrix에, V7 물리 규칙은 ERD에 동기화되어 있다.
+
+## Resolved MaintenanceRequest query contract
+
+2026-11-04 human approval으로 [ADR-020](../adr/ADR-020-maintenance-request-query-contract.md)의
+V1 조회 계약을 확정했다. Q04는 resolved 되었다.
+
+- RESIDENT 가시성의 기준은 current Residence room이 아니라 `reporterId`다. 방을 옮겨도 본인이 올린
+  request는 계속 보인다.
+- WORKER 가시성은 종료된 assignment를 포함해 former-worker historical read-only를 충족한다.
+- 가시성 밖 단건 상세 조회는 `404 REQUEST_NOT_FOUND`이고, command는 `403 ACCESS_DENIED`를 유지한다.
+  이 결정은 permission matrix의 "non-owner는 403"을 command에 한정해 해석하고 read 경로가 request의
+  존재를 드러내지 않게 한다.
+- Endpoint 자체의 role·설정 실패는 `403`이다. WORKER가 아닌 `assigned-to-me`, scope 없는 ADMIN
+  listing, scope 밖을 명시한 location filter가 해당한다.
+- Filter set은 optional이며 필수 filter가 없다. 페이징은 0-based `page`와 `1..100` `size`
+  (default 20), 정렬은 고정 `createdAt DESC, id DESC`이고 client sort parameter는 없다.
+- 목록은 summary projection, 상세는 full DTO이며 상세에 history/visit/comment/attachment를
+  포함하지 않는다. 두 DTO 모두 `version`을 노출한다.
+
+전체 DTO와 error 의미는 Frozen API specification과 permission matrix에 동기화되어 있다.
+
 ## Resolved MaintenanceRequest creation contract
 
 2026-10-02 human approval으로 [ADR-019](../adr/ADR-019-maintenance-request-creation-contract.md)의

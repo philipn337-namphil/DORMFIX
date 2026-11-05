@@ -32,6 +32,9 @@ public class MaintenanceRequest {
     @Column(name = "preferred_visit_start") private Instant preferredVisitStart;
     @Column(name = "preferred_visit_end") private Instant preferredVisitEnd;
     @Column(name = "duplicate_of_id") private Long duplicateOfId;
+    @Column(name = "status_reason", length = 500) private String statusReason;
+    @Column(name = "resolved_at") private Instant resolvedAt;
+    @Column(name = "closed_at") private Instant closedAt;
     @Version @Column(nullable = false) private Long version;
     @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt;
     @Column(name = "updated_at", nullable = false) private Instant updatedAt;
@@ -53,10 +56,120 @@ public class MaintenanceRequest {
         return "P-" + UUID.randomUUID().toString().replace("-", "").substring(0, 28);
     }
     public void assignRequestNumber() { if (id == null) throw new IllegalStateException("Request ID is required."); if (requestNumber != null && !requestNumber.startsWith("P-")) throw new IllegalStateException("Request number is already assigned."); requestNumber="DF-" + id; }
+
+    /**
+     * States an assignment command may act on. {@code REPORTED} is an initial assignment; the
+     * other three are reassignments. {@code RESOLVED} is excluded because the frozen matrix does
+     * not list it as a reassignment source, and the terminal states are never reassignable.
+     */
+    public boolean isAssignable() {
+        return status == RequestStatus.REPORTED || status == RequestStatus.ASSIGNED
+                || status == RequestStatus.IN_PROGRESS || status == RequestStatus.ON_HOLD;
+    }
+
+    public boolean matchesVersion(Long expected) {
+        return version != null && version.equals(expected);
+    }
+
+    public boolean isIn(RequestStatus... allowed) {
+        for (RequestStatus candidate : allowed) {
+            if (status == candidate) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Named lifecycle command moving the request to {@code ASSIGNED} and returning the status it
+     * came from, which the caller records in RequestHistory. There is no public status setter.
+     */
+    public RequestStatus markAssigned(Instant occurredAt) {
+        if (!isAssignable()) {
+            throw new IllegalStateException("Request cannot be assigned from " + status + ".");
+        }
+        return transition(RequestStatus.ASSIGNED, occurredAt, statusReason);
+    }
+
+    public RequestStatus start(Instant occurredAt, String reason) {
+        require(RequestStatus.ASSIGNED);
+        return transition(RequestStatus.IN_PROGRESS, occurredAt, reason);
+    }
+
+    public RequestStatus hold(Instant occurredAt, String reason) {
+        require(RequestStatus.IN_PROGRESS);
+        return transition(RequestStatus.ON_HOLD, occurredAt, reason);
+    }
+
+    public RequestStatus resume(Instant occurredAt, String reason) {
+        require(RequestStatus.ON_HOLD);
+        return transition(RequestStatus.IN_PROGRESS, occurredAt, reason);
+    }
+
+    public RequestStatus resolve(Instant occurredAt, String reason) {
+        require(RequestStatus.IN_PROGRESS);
+        this.resolvedAt = occurredAt;
+        return transition(RequestStatus.RESOLVED, occurredAt, reason);
+    }
+
+    public RequestStatus close(Instant occurredAt, String reason) {
+        require(RequestStatus.RESOLVED);
+        this.closedAt = occurredAt;
+        return transition(RequestStatus.CLOSED, occurredAt, reason);
+    }
+
+    /**
+     * Returns a resolved request to {@code IN_PROGRESS}. {@code resolvedAt} is cleared because the
+     * request is no longer resolved; {@code closedAt} is untouched because CLOSED cannot reopen.
+     */
+    public RequestStatus reopen(Instant occurredAt, String reason) {
+        require(RequestStatus.RESOLVED);
+        this.resolvedAt = null;
+        return transition(RequestStatus.IN_PROGRESS, occurredAt, reason);
+    }
+
+    public RequestStatus reject(Instant occurredAt, String reason) {
+        require(RequestStatus.REPORTED);
+        return transition(RequestStatus.REJECTED, occurredAt, reason);
+    }
+
+    /**
+     * Marks the request a duplicate of {@code originalId}. The caller has already proved the
+     * original exists, is visible and is not itself a duplicate; this guards only self-reference.
+     */
+    public RequestStatus markDuplicate(Long originalId, Instant occurredAt, String reason) {
+        require(RequestStatus.REPORTED);
+        Objects.requireNonNull(originalId);
+        if (originalId.equals(id)) {
+            throw new IllegalStateException("A request cannot duplicate itself.");
+        }
+        this.duplicateOfId = originalId;
+        return transition(RequestStatus.DUPLICATE, occurredAt, reason);
+    }
+
+    private void require(RequestStatus expected) {
+        if (status != expected) {
+            throw new IllegalStateException("Request is " + status + ", not " + expected + ".");
+        }
+    }
+
+    /**
+     * The single place status changes. {@code statusReason} is a projection of the current status,
+     * so it is overwritten every transition and cleared when the command supplies nothing.
+     */
+    private RequestStatus transition(RequestStatus target, Instant occurredAt, String reason) {
+        RequestStatus previous = status;
+        this.status = target;
+        this.statusReason = reason;
+        this.updatedAt = Objects.requireNonNull(occurredAt);
+        return previous;
+    }
     public Long getId(){return id;} public String getRequestNumber(){return requestNumber;} public Long getReporterId(){return reporterId;}
     public Long getSpaceId(){return spaceId;} public Long getFacilityId(){return facilityId;} public Long getCategoryId(){return categoryId;}
     public String getTitle(){return title;} public String getDescription(){return description;} public Priority getPriority(){return priority;}
     public RequestStatus getStatus(){return status;} public EntryPolicy getEntryPolicy(){return entryPolicy;} public boolean isContactBeforeEntry(){return contactBeforeEntry;}
     public Instant getPreferredVisitStart(){return preferredVisitStart;} public Instant getPreferredVisitEnd(){return preferredVisitEnd;}
-    public Long getVersion(){return version;} public Instant getCreatedAt(){return createdAt;}
+    public Long getDuplicateOfId(){return duplicateOfId;} public String getStatusReason(){return statusReason;}
+    public Instant getResolvedAt(){return resolvedAt;} public Instant getClosedAt(){return closedAt;}
+    public Long getVersion(){return version;} public Instant getCreatedAt(){return createdAt;} public Instant getUpdatedAt(){return updatedAt;}
 }

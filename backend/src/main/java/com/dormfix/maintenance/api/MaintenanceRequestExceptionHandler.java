@@ -7,14 +7,22 @@ import com.dormfix.location.application.DormitoryNotFoundException;
 import com.dormfix.location.application.FacilityNotFoundException;
 import com.dormfix.location.application.SpaceNotFoundException;
 import com.dormfix.maintenance.application.InvalidEntryPolicyException;
+import com.dormfix.maintenance.application.InvalidMaintenanceQueryException;
 import com.dormfix.maintenance.application.InvalidPreferredVisitTimeException;
+import com.dormfix.maintenance.application.InvalidWorkerException;
 import com.dormfix.maintenance.application.MaintenanceRequestConflictException;
+import com.dormfix.maintenance.application.MaintenanceRequestNotFoundException;
+import com.dormfix.maintenance.application.RequestAlreadyAssignedException;
+import com.dormfix.maintenance.application.RequestVersionConflictException;
+import com.dormfix.maintenance.application.WorkerNotAssignedException;
+import com.dormfix.maintenance.application.WorkerNotFoundException;
 import com.dormfix.platform.api.ApiError;
 import com.dormfix.platform.api.RequestTraceFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -22,14 +30,77 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice(assignableTypes = MaintenanceRequestController.class)
 public class MaintenanceRequestExceptionHandler {
     @ExceptionHandler({SpaceNotFoundException.class, BuildingNotFoundException.class,
             DormitoryNotFoundException.class, FacilityNotFoundException.class,
-            MaintenanceCategoryNotFoundException.class, UserNotFoundException.class})
+            MaintenanceCategoryNotFoundException.class, UserNotFoundException.class,
+            MaintenanceRequestNotFoundException.class, WorkerNotFoundException.class})
     ResponseEntity<ApiError> notFound(RuntimeException error, HttpServletRequest request) {
         return response(request, HttpStatus.NOT_FOUND, code(error), "Resource was not found.", List.of());
+    }
+
+    /**
+     * A WORKER who is not the current active assignee, including a former assignee. Distinct from
+     * ACCESS_DENIED, which is for a role that cannot use the command at all.
+     */
+    @ExceptionHandler(WorkerNotAssignedException.class)
+    ResponseEntity<ApiError> workerNotAssigned(HttpServletRequest request) {
+        return response(request, HttpStatus.FORBIDDEN, "WORKER_NOT_ASSIGNED",
+                "The caller is not the current assignee.", List.of());
+    }
+
+    @ExceptionHandler(RequestAlreadyAssignedException.class)
+    ResponseEntity<ApiError> alreadyAssigned(HttpServletRequest request) {
+        return response(request, HttpStatus.CONFLICT, "REQUEST_ALREADY_ASSIGNED",
+                "The request already has this active assignment.", List.of());
+    }
+
+    @ExceptionHandler(InvalidWorkerException.class)
+    ResponseEntity<ApiError> invalidWorker(HttpServletRequest request) {
+        return response(request, HttpStatus.CONFLICT, "INVALID_WORKER",
+                "The worker cannot be assigned.", List.of());
+    }
+
+    @ExceptionHandler(RequestVersionConflictException.class)
+    ResponseEntity<ApiError> versionConflict(HttpServletRequest request) {
+        return response(request, HttpStatus.CONFLICT, "VERSION_CONFLICT",
+                "The request has changed. Reload and try again.", List.of());
+    }
+
+    @ExceptionHandler(InvalidMaintenanceQueryException.class)
+    ResponseEntity<ApiError> invalidQuery(InvalidMaintenanceQueryException error,
+            HttpServletRequest request) {
+        return response(request, HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", error.getMessage(),
+                List.of());
+    }
+
+    /**
+     * Type mismatches on query and path parameters, for example a non-numeric page value, so they
+     * answer the standard 400 contract rather than a container default body.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<ApiError> typeMismatch(HttpServletRequest request) {
+        return response(request, HttpStatus.BAD_REQUEST, "VALIDATION_FAILED",
+                "The request contains invalid fields.", List.of());
+    }
+
+    /**
+     * Required by the standard error contract: without these, a rollback or an unmapped failure
+     * would return a container default body with no code, traceId or fieldErrors.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ResponseEntity<ApiError> dataIntegrity(HttpServletRequest request) {
+        return response(request, HttpStatus.CONFLICT, "INVALID_REQUEST_STATE",
+                "The request conflicts with the current data state.", List.of());
+    }
+
+    @ExceptionHandler(Exception.class)
+    ResponseEntity<ApiError> unexpected(HttpServletRequest request) {
+        return response(request, HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR",
+                "The request could not be completed.", List.of());
     }
 
     @ExceptionHandler(AccessDeniedException.class)
@@ -92,7 +163,14 @@ public class MaintenanceRequestExceptionHandler {
         if (error instanceof UserNotFoundException) {
             return "USER_NOT_FOUND";
         }
-        return "SPACE_NOT_FOUND";
+        if (error instanceof MaintenanceRequestNotFoundException) {
+            return "REQUEST_NOT_FOUND";
+        }
+        if (error instanceof WorkerNotFoundException) {
+            return "WORKER_NOT_FOUND";
+        }
+        // No guessed default: an unmapped type must not silently answer with another frozen code.
+        throw new IllegalStateException("Unmapped not-found exception: " + error.getClass());
     }
 
     private ResponseEntity<ApiError> response(HttpServletRequest request, HttpStatus status,

@@ -13,7 +13,10 @@ import com.dormfix.catalog.application.CatalogQueryService;
 import com.dormfix.catalog.application.AdminCatalogCommandService;
 import com.dormfix.location.application.ResidenceCommandService;
 import com.dormfix.location.application.ResidenceQueryService;
+import com.dormfix.maintenance.application.MaintenanceRequestAssignmentService;
 import com.dormfix.maintenance.application.MaintenanceRequestCreationService;
+import com.dormfix.maintenance.application.MaintenanceRequestLifecycleService;
+import com.dormfix.maintenance.application.MaintenanceRequestQueryService;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.junit.jupiter.api.Test;
@@ -24,6 +27,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -57,6 +61,12 @@ class SecurityBoundaryTest {
     @MockitoBean
     private MaintenanceRequestCreationService maintenanceRequestCreationService;
     @MockitoBean
+    private MaintenanceRequestQueryService maintenanceRequestQueryService;
+    @MockitoBean
+    private MaintenanceRequestAssignmentService maintenanceRequestAssignmentService;
+    @MockitoBean
+    private MaintenanceRequestLifecycleService maintenanceRequestLifecycleService;
+    @MockitoBean
     private JwtDecoder jwtDecoder;
     @MockitoBean
     private JwtAuthenticationConverter jwtAuthenticationConverter;
@@ -78,12 +88,42 @@ class SecurityBoundaryTest {
                 });
     }
 
+    /**
+     * A privileged role gains no authority over a frozen path that is not implemented yet. The
+     * lifecycle commands this test used to target are now implemented under ADR-022, so it points
+     * at paths that are still unimplemented: request metadata PATCH, visits, work logs, comments
+     * and attachments. Their authorization is covered by their own slices once they exist.
+     */
     @Test
     @WithMockUser(roles = "SUPER_ADMIN")
     void skeletonNeverPretendsBusinessAuthorizationIsImplemented() throws Exception {
-        mvc.perform(post("/api/v1/maintenance-requests/1/resolve"))
+        for (String unimplemented : java.util.List.of("/api/v1/maintenance-requests/1/visits",
+                "/api/v1/maintenance-requests/1/work-logs",
+                "/api/v1/maintenance-requests/1/comments",
+                "/api/v1/maintenance-requests/1/attachments")) {
+            mvc.perform(post(unimplemented))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        }
+        mvc.perform(patch("/api/v1/maintenance-requests/1"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    /**
+     * The implemented lifecycle commands are now reachable for an authenticated caller, so the
+     * deny-all default no longer hides them. Business authorization for them lives in
+     * MaintenanceRequestLifecycleIntegrationTest against a real database.
+     */
+    @Test
+    @WithMockUser(roles = "SUPER_ADMIN")
+    void implementedLifecyclePathsAreNoLongerBlockedByTheDenyAllDefault() throws Exception {
+        for (String command : java.util.List.of("start", "hold", "resume", "resolve", "close",
+                "reopen", "reject", "mark-duplicate", "assignments")) {
+            mvc.perform(post("/api/v1/maintenance-requests/1/" + command))
+                    .andExpect(result -> org.assertj.core.api.Assertions
+                            .assertThat(result.getResponse().getStatus()).isNotEqualTo(403));
+        }
     }
 
     @Test

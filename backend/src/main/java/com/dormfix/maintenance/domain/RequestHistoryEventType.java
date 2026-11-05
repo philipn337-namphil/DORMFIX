@@ -1,2 +1,14 @@
 package com.dormfix.maintenance.domain;
-public enum RequestHistoryEventType { REQUEST_CREATED }
+public enum RequestHistoryEventType {
+    REQUEST_CREATED,
+    REQUEST_ASSIGNED,
+    REQUEST_REASSIGNED,
+    REQUEST_STARTED,
+    REQUEST_HELD,
+    REQUEST_RESUMED,
+    REQUEST_RESOLVED,
+    REQUEST_CLOSED,
+    REQUEST_REOPENED,
+    REQUEST_REJECTED,
+    REQUEST_MARKED_DUPLICATE
+}
