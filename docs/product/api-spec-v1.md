@@ -81,6 +81,120 @@ referenced resource is `404`. A Space outside the caller's current Residence, in
 hierarchy/category, a facility outside the submitted Space, or a retired facility is `409
 INVALID_REQUEST_STATE`.
 
+### Maintenance request reads
+
+Read visibility is anchored per role. A `RESIDENT` sees the requests they filed, matched on
+`reporterId`, and keeps them after moving rooms. A `WORKER` sees every request they are or were
+assigned to, including ended assignments. An `ADMIN` sees requests whose room resolves to a
+dormitory in their scope. A `SUPER_ADMIN` sees all requests. A caller holding several roles sees
+the union.
+
+`GET /maintenance-requests/{id}` returns `404 REQUEST_NOT_FOUND` both when the request does not
+exist and when it exists outside the caller visibility, so the path does not disclose the
+existence of requests the caller may not read. Commands keep `403 ACCESS_DENIED` for a wrong
+role, a non-owner, or a former assignee. Endpoint-level role and configuration failures also stay
+`403 ACCESS_DENIED`: a non-`WORKER` calling `assigned-to-me`, a scope-less `ADMIN` calling the
+listing, and an explicit `dormitoryId`, `buildingId` or `spaceId` filter outside an `ADMIN` scope.
+
+`GET /maintenance-requests?status=&priority=&categoryId=&dormitoryId=&buildingId=&spaceId=&assigneeId=&page=&size=`
+returns `MaintenanceRequestPageResponse`. `status` is repeatable; the remaining filters are
+single-valued; all are optional and no filter is mandatory. Filters narrow within visibility and
+never widen it, so a filter naming an invisible resource yields an empty page except the `403`
+scope cases above. `page` is zero-based with default `0` and `size` is `1..100` with default `20`;
+a violation or an unparsable `status`/`priority` is `400 VALIDATION_FAILED`. Ordering is fixed at
+`createdAt DESC, id DESC` and V1 exposes no client sort parameter.
+
+`GET /maintenance-requests/assigned-to-me` is `WORKER`-only and uses the same page envelope, DTO,
+bounds and ordering. `active` defaults to `true` and selects current assignment rows; `active=false`
+selects ended assignments, which is how a former assignee reaches historical read-only access.
+
+The listing item DTO is `MaintenanceRequestSummaryResponse(id, requestNumber, status, priority,
+categoryId, spaceId, facilityId, title, assigneeId, createdAt, updatedAt, version)`. The detail DTO
+adds `reporterId`, `description`, `entryPolicy`, `contactBeforeEntry`, `preferredVisitStart`,
+`preferredVisitEnd`, `duplicateOfId` and the persisted lifecycle timestamps. `description` and the
+entry fields are absent from the listing projection so bulk listings do not broadcast resident
+entry-consent data. Detail embeds no RequestHistory, Visit, WorkLog, comment or attachment
+collection; each has its own path and its own visibility rule. The page envelope is `content`,
+`page`, `size`, `totalElements`, `totalPages`, and both read DTOs always expose `version`.
+
+### Maintenance request assignment
+
+`POST /maintenance-requests/{id}/assignments` takes exactly
+`AssignWorkerRequest(workerId, reason?, version)`. It never accepts `status`, `assignedById`,
+`assignedAt`, `unassignedAt` or an assignment identifier, and `assignedById` is always the JWT
+subject. `reason` is at most 500 characters and is stored on the new assignment row.
+
+The actor is an `ADMIN` whose scope contains the dormitory that the request room resolves to, or a
+`SUPER_ADMIN`. A wrong role, a scope-less `ADMIN`, or an `ADMIN` outside the request dormitory is
+`403 ACCESS_DENIED`; the read-path `404` rule does not apply to commands.
+
+One path serves both behaviors and the current status selects which. From `REPORTED` it is an
+initial assignment. From `ASSIGNED`, `IN_PROGRESS` or `ON_HOLD` it is a reassignment that ends the
+active assignment and creates a new one, and the request returns to `ASSIGNED` so the new worker
+starts again. From `RESOLVED`, `CLOSED`, `REJECTED` or `DUPLICATE` it is
+`409 INVALID_REQUEST_STATE`; a `SUPER_ADMIN` does not bypass the terminal states.
+
+A `workerId` that does not exist is `404 WORKER_NOT_FOUND`. An existing user that does not hold the
+`WORKER` role, or whose status is not `ACTIVE`, is `409 INVALID_WORKER`, because the payload is well
+formed and the failure is the referenced entity state. Assigning the request to the user who is
+already its active assignee is `409 REQUEST_ALREADY_ASSIGNED`, and a concurrent command that loses
+the active-assignment unique index race returns the same code. `409 VERSION_CONFLICT` is reserved
+for a stale submitted `version` and for an optimistic-locking failure on the request row, and is
+never used for the active-assignment violation.
+
+The command is one transaction: end the active assignment when reassigning, insert the new
+assignment, move the status to `ASSIGNED`, and append exactly one RequestHistory row. Initial
+assignment appends event type `REQUEST_ASSIGNED` and reassignment appends `REQUEST_REASSIGNED`;
+both record the acting administrator, the previous status, `new_status=ASSIGNED`, and `metadata`
+carrying `workerId` plus `previousWorkerId` on reassignment.
+
+`MaintenanceAssignment` is the single source of truth for assignment. The request row carries no
+denormalized assignee column, and `assigneeId` in the read DTOs is the `worker_id` of the row whose
+`unassigned_at` is null, or `null` when the request has none. V1 does not restrict which dormitory a
+worker may be assigned to, because `admin_dormitory_scopes` covers administrators only and no
+worker-to-dormitory mapping exists.
+
+### Maintenance request lifecycle commands
+
+Six commands take `LifecycleCommandRequest(statusReason?, version)`: `start`, `hold`, `resume`,
+`resolve`, `close` and `reopen`. `reject` takes the same shape. `mark-duplicate` takes
+`MarkDuplicateRequest(duplicateOfId, statusReason?, version)`. `hold` and `reject` require
+`statusReason`; elsewhere it is optional. It is at most 500 characters. No command accepts `status`,
+`assigneeId`, a lifecycle timestamp, `reporterId` or `priority`, and the actor is the JWT subject.
+
+`status_reason` is a projection of the current status: every transition writes the supplied value,
+or `null` when the command carries none. The append-only RequestHistory row keeps the reason of
+each transition, so the column is never accumulated.
+
+`resolve` sets `resolved_at` and `close` sets `closed_at`. `reopen` clears `resolved_at` and never
+touches `closed_at`, because a `CLOSED` request cannot be reopened. Resolving again after a reopen
+overwrites `resolved_at`. `reject` and `mark-duplicate` set neither timestamp.
+
+`mark-duplicate` requires a `duplicateOfId` that exists and is visible to the actor under the read
+visibility rules; otherwise the response is `404 REQUEST_NOT_FOUND`, identical to a missing request.
+A self-reference, or an original that is itself `DUPLICATE`, is `409 INVALID_REQUEST_STATE`: V1
+permits no duplicate chains. `duplicate_of_id` is written once because `DUPLICATE` is terminal.
+
+`close`, `reject` and `mark-duplicate` end the active assignment in the same transaction, setting
+`unassigned_at` and `unassigned_by_id` to the acting user, so terminal work leaves the worker
+listing. `resolve` does not end it, because `reopen` must return the request to `IN_PROGRESS` with
+that worker. `reopen` therefore requires an active assignment and is otherwise
+`409 INVALID_REQUEST_STATE`.
+
+`start`, `hold`, `resume` and `resolve` require the caller to be the current active assignee. A
+caller holding the `WORKER` role who is not that assignee, including a former assignee, receives
+`403 WORKER_NOT_ASSIGNED`; a caller whose role cannot use the command receives
+`403 ACCESS_DENIED`. `close` and `reopen` accept a `RESIDENT` whose id equals `reporter_id`, or a
+scoped `ADMIN`/`SUPER_ADMIN`. `reject` and `mark-duplicate` accept only a scoped
+`ADMIN`/`SUPER_ADMIN`. Authorization is evaluated before any state check.
+
+A source state outside the matrix is `409 INVALID_REQUEST_STATE`; the commands are not idempotent.
+One transaction performs the state change, the terminal assignment end where it applies, the reason
+and timestamp writes, and exactly one RequestHistory row. The eight commands append
+`REQUEST_STARTED`, `REQUEST_HELD`, `REQUEST_RESUMED`, `REQUEST_RESOLVED`, `REQUEST_CLOSED`,
+`REQUEST_REOPENED`, `REQUEST_REJECTED` and `REQUEST_MARKED_DUPLICATE`, and the duplicate row carries
+`{"duplicateOfId": <id>}` in `metadata`.
+
 ### Structure administration
 
 All structure-management paths use the `/admin` prefix. These endpoints are part of the frozen contract but are not implemented yet.

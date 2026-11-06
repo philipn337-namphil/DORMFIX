@@ -1,5 +1,201 @@
 # DormFix 작업 로그
 
+## 2026-11-04 - 신고생성 슬라이스 리뷰 결과 기록, Phase 3 조회 작업 착수
+
+- 브랜치 정리: 로컬 `main`을 `origin/main`(`cd2f4b4`, PR #14 병합)으로 fast-forward하고
+  `feature/query-maintenance-request`를 생성했다. `feature/create-maintenance-request`는 전량
+  `origin/main`에 포함되어 diff가 비어 있다(병합 완료, 삭제 대기).
+- 누락 기록 보완: 이전 10-07 항목들이 "no commit or push was performed"로 끝나 있으나, 실제로는 그 이후
+  커밋 `40ff786`/`66f628c` 생성, push, PR #14 생성·병합(`cd2f4b4`)이 수행되었다.
+- `7e1d717..66f628c`(신고생성 세로 슬라이스) 코드리뷰를 high 수준으로 실행했다. Frozen baseline 해시 8개
+  재계산 일치, ArchUnit 규칙 6개 위반 없음, `P-`→`DF-<id>` 교체의 트랜잭션 내 격리와 응답 최종값,
+  권한→404→409→400 순서, V6 CHECK 제약과 앱 검증 일치를 확인했다.
+- **사용자 결정: 전체 코드리뷰는 Phase 3 완료 후 인증 슬라이스부터 처음부터 다시 수행한다.** 아래 지적
+  8건은 지금 수정하지 않고 deferred 목록으로 보존하며, 일반화한 규칙만 `AGENTS.md`
+  "코드 리뷰에서 확정된 구현 규칙"에 반영했다. 신규 코드는 그 규칙을 지킨다.
+
+### Deferred 리뷰 지적 (Phase 3 완료 후 일괄 처리)
+
+1. `maintenance/api/CreateMaintenanceRequest.java:8` — `contactBeforeEntry`가 primitive `boolean`이라
+   필드 누락 시 400이 아니라 `false`로 저장된다. `@NotNull Boolean` 필요.
+2. `maintenance/application/MaintenanceRequestCreationService.java:134` — `ZoneId.of(dormitory.getTimezone())`
+   무방비. timezone은 `@NotBlank @Size(max=50)`만 검증되어 `"KST"` 같은 값이 저장되면 해당 기숙사의 모든
+   신고 생성이 계약 외 500으로 실패한다. 동일 패턴 `ResidenceCommandService:158,167`. 근본 수정은 기숙사 생성 검증.
+3. `maintenance/api/CreateMaintenanceRequest.java:8` — `description`에 `@Size` 상한 없음. JSON 본문 크기
+   제한도 없어 TEXT에 대용량 저장이 가능하다.
+4. `maintenance/api/MaintenanceRequestExceptionHandler.java:151` — `DataIntegrityViolationException` 및
+   예상 외 예외 fallback 핸들러 없음. rollback 경로가 Spring 기본 에러 본문으로 나가 Frozen 표준 에러
+   계약(`code`/`traceId`/`fieldErrors`)을 위반한다. `INTERNAL_ERROR` 핸들러가 레포 전체에 없다.
+5. `maintenance/application/MaintenanceRequestCreationService.java:69` — `validateActiveRoom`이 소유권
+   `requireCurrentResidence`보다 먼저 실행되고 conflict 메시지가 응답에 노출되어, 입주자가 `spaceId`를 훑어
+   전체 space/building/dormitory의 존재·활성 상태를 열거할 수 있다.
+6. `maintenance/application/MaintenanceRequestCreationService.java:149` — `entryPolicy()`가
+   `IllegalArgumentException`만 잡지만 `Enum.valueOf(null)`은 NPE를 던진다. command record가 null을
+   허용하므로 컨트롤러 외 호출자에서는 400 대신 500이 된다.
+7. `maintenance/api/MaintenanceRequestExceptionHandler.java:95` — `code()` 기본 반환값이
+   `"SPACE_NOT_FOUND"`. 예외 타입 추가 시 분기를 잊으면 컴파일 오류 없이 잘못된 Frozen 코드가 나간다.
+8. `maintenance/application/MaintenanceRequestCreationService.java:119` — `validateActiveRoom`이
+   `ResidenceCommandService`의 계층 탐색/활성 검사를 중복한다. location 규칙 변경 시 조용히 갈라진다.
+
+- 변경 파일: `AGENTS.md`, `WORKLOG.md`
+- 검증: 이번 변경은 문서 전용이다. Gradle 검증은 코드 변경이 없어 실행하지 않았다.
+- Phase 3 조회 계약 공백을 조사하고 Proposed `ADR-020`을 작성했다. Frozen API 인벤토리에 세 read
+  path가 이미 있으나 가시성 기준, 가시성 밖 단건 조회의 403/404, filter set, 페이징 경계·정렬,
+  summary/detail DTO 분리, 상세의 sub-resource 포함 여부, `assigned-to-me`의 종료된 assignment
+  처리, scope-less ADMIN 동작이 모두 미정임을 확인했다. `REQUEST_NOT_FOUND`는 이미 Frozen 404
+  코드로 존재해 신규 에러 코드는 필요하지 않다.
+- ADR-020을 ADR 인덱스에 Proposed로 등록하고 `open-questions.md`에 Q04로 기록했다. Frozen product
+  문서와 baseline hash, Java, Flyway, 테스트는 변경하지 않았다.
+- 변경 파일: `AGENTS.md`, `WORKLOG.md`, `docs/adr/ADR-020-maintenance-request-query-contract.md`,
+  `docs/adr/README.md`, `docs/architecture/open-questions.md`
+- 검증: `python scripts/check_repository.py` 통과, `git diff --check` 통과(기존 LF/CRLF 경고만).
+  문서 전용 변경이라 Gradle 검증은 실행하지 않았다.
+- 사용자 승인(2026-11-04)으로 ADR-020을 Accepted로 전환했다. 가시성 밖 단건 조회는 `404
+  REQUEST_NOT_FOUND`, RESIDENT 가시성 anchor는 `reporterId`로 제안대로 확정되었다. Frozen API
+  specification과 permission matrix에 read 가시성, 404/403 경계, filter set, 페이징 경계, 고정
+  정렬, summary/detail DTO를 동기화하고 baseline hash 2건을 재계산했다. Q04는 resolved다.
+- 구현 착수 직전에 ADR-020과 스키마의 불일치를 발견했다. V6에는 assignment 테이블도 `assignee_id`
+  컬럼도 없어서 ADR-020의 WORKER 가시성, `GET /maintenance-requests/assigned-to-me`,
+  `assigneeId` filter/field를 구현할 수 없다. ADR-020에 이 의존성을 명시했다.
+- 사용자 결정: 배정 슬라이스를 먼저 구현하고 조회를 한 번에 완성한다. 조회 코드를 두 번 열지 않기
+  위한 선택이다.
+- Proposed `ADR-021`(배정 계약)을 작성했다. Frozen은 경로, transition, actor role·scope, ERD의
+  `MaintenanceAssignment` 컬럼과 partial unique index까지 이미 정해두었고 error mapping만 명시적으로
+  미뤄둔 상태였다. ADR-021은 command DTO, `404 WORKER_NOT_FOUND` / `409 INVALID_WORKER`,
+  active assignee 재배정과 unique index 경합의 `409 REQUEST_ALREADY_ASSIGNED`,
+  `VERSION_CONFLICT`의 경계, `REQUEST_ASSIGNED`/`REQUEST_REASSIGNED` 분리, V7 마이그레이션
+  (V6 미수정, check constraint 교체), worker dormitory 무제약을 제안한다. ADR 인덱스에 Proposed로
+  등록하고 `open-questions.md`에 Q05로 기록했다.
+- 사용자 승인(2026-11-04)으로 ADR-021을 Accepted로 전환했다. `409 INVALID_WORKER`, duplicate
+  assignee와 unique index 경합의 `409 REQUEST_ALREADY_ASSIGNED`, denormalized `assignee_id` 없는
+  단일 진실 원천이 제안대로 확정되었다. Frozen API specification, permission matrix, ERD(V7 물리
+  규칙)에 동기화하고 baseline hash 3건을 재계산했다. Q05는 resolved다.
+
+### 구현: 배정 슬라이스 + 조회 슬라이스 (한 슬라이스)
+
+- `V7__maintenance_assignment.sql`: ERD대로 `maintenance_assignment`를 만들고 네 FK 모두 ON DELETE
+  RESTRICT, partial unique index `ux_assignment_active_request`,
+  `(worker_id, assigned_at DESC)` index를 추가했다. `unassigned_at`/`unassigned_by_id` 동반
+  NULL 여부와 시간 순서를 CHECK로 보강했다. V6는 수정하지 않고
+  `ck_request_history_event_type`만 drop 후 재생성해 `REQUEST_ASSIGNED`/`REQUEST_REASSIGNED`를
+  허용했다.
+- Domain: `MaintenanceAssignment`(생성·`end`·`isActive`, 종료된 행 보존), `MaintenanceRequest`에
+  named lifecycle command `markAssigned`(이전 status 반환)와 `isAssignable`/`matchesVersion`,
+  누락된 `status_reason`/`resolved_at`/`closed_at` 매핑과 `getUpdatedAt`을 추가했다. public status
+  setter는 없다. `RequestHistory`는 JSONB `metadata`를 받는 생성자를 추가했고 모든 컬럼을
+  `updatable = false`로 두어 append-only를 코드에서도 고정했다.
+- Application: `MaintenanceRequestAssignmentService`는 한 transaction에서 인가 → version → state →
+  worker 검증 → 기존 assignment 종료 → 신규 생성 → `markAssigned` → history 한 행을 수행한다.
+  인가를 state·reference 검증보다 먼저 두어 conflict 메시지로 타인 리소스 상태가 새지 않게 했다.
+  `MaintenanceRequestQueryService`는 상세/목록/`assigned-to-me`를 제공하고 가시성 밖 상세를 404로
+  돌린다. 페이징 경계는 0-based `page`, `1..100` `size`다.
+- Infrastructure: 네이티브 가시성 쿼리에 ORDER BY를 포함하고 정렬 없는 `PageRequest`를 넘겨
+  Spring Data가 property 이름을 덧붙이지 못하게 했다(Residence 슬라이스가 겪은 결함). 빈
+  컬렉션이 네이티브 IN에 들어가지 못하므로 status·dormitory 필터는 sentinel 값을 넘기고 동반
+  카운트 파라미터로 필터를 끈다. 목록의 `assigneeId`는 한 번의 배치 조회로 채워 N+1을 피한다.
+- API: `GET /{id}`, `GET /maintenance-requests`, `GET /assigned-to-me`,
+  `POST /{id}/assignments` 네 경로를 추가했다. `anyRequest().denyAll()`이므로
+  `SecurityConfiguration`에 네 경로를 명시 등록했다. 목록 summary는 `description`과 출입 필드를
+  제외하고 상세만 노출한다.
+- 예외 핸들러: `REQUEST_NOT_FOUND`, `WORKER_NOT_FOUND`, `REQUEST_ALREADY_ASSIGNED`,
+  `INVALID_WORKER`, `VERSION_CONFLICT`, 쿼리 400 매핑을 추가했다. 이번 기회에 AGENTS.md에 새로 박은
+  규칙도 적용했다. `code()`의 추측성 기본값 `SPACE_NOT_FOUND`를 제거해 미지의 타입은 명시적으로
+  실패하게 했고, `DataIntegrityViolationException`·`MethodArgumentTypeMismatchException`·
+  `Exception` fallback을 추가해 표준 에러 계약을 우회하는 응답이 나가지 않게 했다.
+- 테스트: `MaintenanceAssignmentTest`(도메인 lifecycle), `MaintenanceRequestTest` 확장(전이·version·
+  status setter 부재), 핸들러 테스트 확장(신규 코드·fallback·추측성 기본값 거부),
+  `MaintenanceRequestAssignmentIntegrationTest`(초기 배정·재배정·IN_PROGRESS 복귀·scope 403·
+  404/409 매핑·duplicate assignee·stale version·terminal state·DB partial unique index·rollback),
+  `MaintenanceRequestQueryIntegrationTest`(본인/타인 404 동일성·scope 가시성·former worker 읽기·
+  역할별 목록·summary projection·assigneeId·정렬·필터·scope 밖 필터 403·scope 없는 ADMIN 403·
+  페이징 경계·assigned-to-me active 전환)를 추가했다. `FoundationIntegrationTest`의 마이그레이션
+  기대값을 `7`로 갱신하고 `SecurityBoundaryTest`에 신규 서비스 mock 2개를 추가했다.
+
+### 통합 테스트가 잡은 버그: Hibernate flush 순서 vs partial unique index
+
+- 첫 전체 실행은 69 tests / 2 failures였다. 두 실패 모두 재배정이었고, 재배정 요청이 200이 아니라
+  409 `REQUEST_ALREADY_ASSIGNED`를 반환했다.
+- 원인: Hibernate는 한 flush 안에서 insertion을 update보다 먼저 보낸다. 기존 assignment의
+  `end()` UPDATE와 신규 assignment INSERT를 같은 flush에 두면, 기존 행의 `unassigned_at`이 아직
+  NULL인 상태로 두 번째 활성 행이 INSERT되어 `ux_assignment_active_request`가 정당한 재배정을
+  거부한다. 그 `DataIntegrityViolationException`을 경합으로 간주하는 catch가 409로 바꿨다.
+- 수정: 종료된 assignment를 먼저 `saveAndFlush`해 UPDATE를 단독 flush로 내보낸 뒤 신규 행을
+  INSERT한다. 마이그레이션, 계약, 에러 매핑은 바꾸지 않았다. 경합을
+  `REQUEST_ALREADY_ASSIGNED`로 매핑하는 동작은 그대로 유지된다.
+
+### 검증 결과
+
+- 요청 순서대로 전부 통과했다: `gradlew --stop`(No Gradle daemons are running) →
+  `python scripts/check_repository.py` → `git diff --check`(기존 LF/CRLF 경고만) →
+  `check bootJar --no-daemon --console=plain` → `integrationTest --no-daemon --console=plain`.
+- 최종 integrationTest 집계: **17 suites, 69 tests, 0 failures, 0 errors, 0 skipped.** 신규 기여는
+  배정 10, 조회 12다. Docker Desktop을 기동한 뒤 PostgreSQL Testcontainers로 실행했다.
+- 단위 `check`는 Checkstyle(main/test/integrationTest)과 ArchUnit을 포함해 통과했다.
+- 캐시나 빌드 산출물을 삭제하지 않았고 commit, push, reset, checkout을 수행하지 않았다.
+
+### 구현: lifecycle command 슬라이스 (ADR-022)
+
+- 사용자 승인(2026-11-04)으로 ADR-022를 Accepted로 전환했다. 종료 전이가 active assignment를
+  종료하고 `resolve`는 유지하는 결정이 제안대로 확정되었다. Frozen API specification, permission
+  matrix, ERD(V8 물리 규칙과 duplicate chain 금지)에 동기화하고 baseline hash 3건을 재계산했다.
+  Q06은 resolved다.
+- `V8__maintenance_request_lifecycle.sql`: `ck_request_history_event_type`을 11개 event type으로
+  교체하고(V6/V7 미수정), `duplicate_of_id` 자기참조 금지, status와 `duplicate_of_id`의 동반 조건,
+  `closed_at`은 `resolved_at` 이후라는 CHECK 3개와 `(status, resolved_at)` index를 추가했다.
+- Domain: `MaintenanceRequest`에 8개 named command(`start`/`hold`/`resume`/`resolve`/`close`/
+  `reopen`/`reject`/`markDuplicate`)와 `isIn`, 단일 `transition` 헬퍼를 추가했다. `transition`이
+  status 변경의 유일한 지점이며 `statusReason`을 매번 덮어쓰거나 지운다. public status setter는
+  없다. `resolve`가 `resolvedAt`, `close`가 `closedAt`을 쓰고 `reopen`은 `resolvedAt`만 지운다.
+- Application: `MaintenanceRequestLifecycleService`가 8개 전이를 제공한다. 네 worker 전이는 source
+  state, event type, 호출할 named command만 다르므로 `Transition` 함수형 인터페이스로 한 본문을
+  공유한다. 인가 → version → state 순서를 지키고 `Authority` enum으로 세 권한 유형을 나눈다.
+  `WorkerNotAssignedException`을 추가해 `403 WORKER_NOT_ASSIGNED`와 `ACCESS_DENIED`를 분리했다.
+- API: 8개 POST 엔드포인트, `LifecycleCommandRequest`/`MarkDuplicateRequest`,
+  `SecurityConfiguration`에 8개 경로 명시 등록(`anyRequest().denyAll()` 때문), 핸들러에
+  `WORKER_NOT_ASSIGNED` 매핑을 추가했다.
+- `SecurityBoundaryTest`의 `skeletonNeverPretendsBusinessAuthorizationIsImplemented`는 `/resolve`가
+  미구현이라는 전제로 403을 단언했다. ADR-022로 구현되었으므로 단언을 약화시키지 않고 아직
+  미구현인 frozen 경로(visits/work-logs/comments/attachments, PATCH `/{id}`)로 의도를 옮겼고,
+  구현된 lifecycle 경로가 deny-all에 더는 막히지 않는다는 테스트를 별도로 추가했다.
+
+### 통합 테스트가 잡은 3건
+
+- 첫 전체 실행은 83 tests / 3 failures였고 원인이 각각 달랐다. 2건은 테스트가 틀렸고 1건은 계약의
+  허점을 드러냈다.
+- (1) `resolvedAndTerminalStatesCannotBeAssigned`가 `duplicate_of_id` 없이 status를 DUPLICATE로
+  강제해 V8의 `ck_maintenance_request_duplicate_status`에 걸렸다. 제약이 의도대로 동작한 것이므로
+  테스트가 original을 함께 설정하도록 고쳤다.
+- (2) `terminalStatesRefuseEveryFurtherCommandIncludingForASuperAdmin`이 모든 명령에 409를
+  기대했으나 worker 전용 4개는 403이었다. 인가가 state보다 먼저 평가되고 SUPER_ADMIN은 WORKER
+  role이 없으므로 올바른 동작이다. 테스트를 worker 명령 403 / admin·reporter 명령 409로 분리해
+  이 순서를 명시적으로 검증하게 했다.
+- (3) `reject`를 ASSIGNED 건에 호출해 409가 났다. frozen matrix가 `reject`를 REPORTED로 한정하기
+  때문이다. 여기서 드러난 사실: **REPORTED 건은 active assignment를 가질 수 없으므로**(배정이 같은
+  transaction에서 ASSIGNED로 옮긴다) "close/reject/mark-duplicate가 배정을 종료한다"는 규칙은 실제로
+  `close`에만 적용된다. 규칙 자체는 세 전이 모두에 그대로 유지했다. 불변식이 그 우연에 의존하지
+  않게 하고, 나중에 source state를 넓히는 슬라이스가 공백 대신 올바른 동작을 물려받게 하기
+  위해서다. 이 관찰을 ADR-022 Consequences에 기록했다. 계약과 Frozen 문서는 바꾸지 않았다.
+
+### lifecycle 슬라이스 검증 결과
+
+- 요청 순서대로 전부 통과했다: `gradlew --stop`(No Gradle daemons are running) →
+  `python scripts/check_repository.py` → `git diff --check`(기존 LF/CRLF 경고만) →
+  `check bootJar --no-daemon --console=plain` → `integrationTest --no-daemon --console=plain`.
+- 최종 integrationTest 집계: **18 suites, 83 tests, 0 failures, 0 errors, 0 skipped.** lifecycle
+  신규 기여는 14다. 단위 `check`는 Checkstyle 3종과 ArchUnit 포함 통과했다.
+- 캐시나 빌드 산출물을 삭제하지 않았고 commit, push, reset, checkout을 수행하지 않았다.
+
+### 남은 작업과 주의사항
+
+- 커밋되지 않은 변경이 `feature/query-maintenance-request`에 남아 있다. 커밋·push·PR은 요청 시에만 한다.
+- Phase 3 남은 범위: 신고 metadata PATCH, visit, work log, attachment, comment. 전부 계약 확인 →
+  필요하면 ADR → 승인 → 구현 순서를 지킨다. 상태 전이 8개는 ADR-022로 완료했다.
+- RequestHistory event type을 늘리는 슬라이스는 `ck_request_history_event_type`을 또 교체해야 한다.
+  V7과 V8이 그 선례다.
+- 전체 코드리뷰는 사용자 결정대로 Phase 3 완료 후 인증 슬라이스부터 처음부터 수행한다. 위
+  deferred 목록 8건이 그 대상이며, 이번 슬라이스에서 4번(fallback 핸들러)과 7번(추측성 기본값)은
+  신규 코드 기준으로 이미 해소했다. 1·2·3·5·6·8번은 생성 슬라이스에 그대로 남아 있다.
+
 ## 2026-10-06 - MaintenanceRequest creation vertical slice completion follow-up
 
 - Completed the ADR-019 create slice currently present on `feature/create-maintenance-request`:

@@ -24,6 +24,64 @@ CLOSED, REJECTED, DUPLICATE는 terminal이다. 다른 transition은 허용하지
 - ADMIN: dormitory scope의 전체 request 조회, active request의 허용된 category/priority/location 조정, assign/reassign, REPORTED reject/duplicate, visit 관리, RESOLVED close/reopen, scope 내 Facility 관리와 Facility status command 수행. Resident entry consent를 대신 변경하지 않으며 MaintenanceCategory를 관리하지 않는다.
 - SUPER_ADMIN: ADMIN 기능과 전체 Dormitory/Building/Space/Facility, user-role 및 전역 system/master-data 관리를 가진다. MaintenanceCategory는 V1 전역 Master Data이므로 SUPER_ADMIN 전용이다. 모든 domain state rule은 동일하게 적용된다.
 
+## MaintenanceRequest lifecycle command 세부
+
+- Command DTO는 `LifecycleCommandRequest(statusReason?, version)`이고 `mark-duplicate`만
+  `MarkDuplicateRequest(duplicateOfId, statusReason?, version)`를 쓴다. `hold`와 `reject`는
+  `statusReason`을 필수로 받고 나머지는 선택이며 최대 500자다. actor는 JWT subject다.
+- `status_reason`은 현재 status의 투영이다. 매 transition이 전달된 값으로 덮어쓰고, 값이 없으면
+  null로 지운다. 누적 audit은 append-only RequestHistory가 담당한다.
+- `resolve`가 `resolved_at`, `close`가 `closed_at`을 쓴다. `reopen`은 `resolved_at`을 지우고
+  `closed_at`은 건드리지 않는다. reopen 후 재resolve는 `resolved_at`을 덮어쓴다. `reject`와
+  `mark-duplicate`는 두 timestamp를 쓰지 않는다.
+- `duplicateOfId`의 대상은 존재하고 actor의 read 가시성 안에 있어야 한다. 아니면 누락과 동일한
+  `404 REQUEST_NOT_FOUND`다. 자기 참조와 `DUPLICATE` 대상은 `409 INVALID_REQUEST_STATE`이며 V1은
+  duplicate chain을 허용하지 않는다. `duplicate_of_id`는 한 번만 기록된다.
+- `close`, `reject`, `mark-duplicate`는 같은 transaction에서 active assignment를 종료하고
+  `unassigned_at`/`unassigned_by_id`에 수행자를 기록한다. `resolve`는 종료하지 않는다. `reopen`은
+  active assignment가 없으면 `409 INVALID_REQUEST_STATE`다.
+- `start`/`hold`/`resume`/`resolve`는 current active assignee만 수행한다. WORKER role이지만 current
+  active assignee가 아닌 caller(former assignee 포함)는 `403 WORKER_NOT_ASSIGNED`, 해당 command를
+  쓸 수 없는 role은 `403 ACCESS_DENIED`다. 인가는 state 검사보다 먼저 평가한다.
+- matrix 밖 source state는 `409 INVALID_REQUEST_STATE`이고 command는 멱등이 아니다. 한 transaction이
+  state 전이, 해당되는 경우의 assignment 종료, reason/timestamp 기록, RequestHistory 한 행을 수행한다.
+- 8개 command는 `REQUEST_STARTED`, `REQUEST_HELD`, `REQUEST_RESUMED`, `REQUEST_RESOLVED`,
+  `REQUEST_CLOSED`, `REQUEST_REOPENED`, `REQUEST_REJECTED`, `REQUEST_MARKED_DUPLICATE`를 남기고
+  duplicate 행은 `metadata`에 `duplicateOfId`를 담는다.
+
+## MaintenanceRequest 배정 오류 매핑
+
+- `POST /maintenance-requests/{id}/assignments`의 actor는 request room이 해석되는 Dormitory scope의
+  `ADMIN` 또는 `SUPER_ADMIN`이다. wrong role, scope 없는 ADMIN, scope 밖 ADMIN은 `403 ACCESS_DENIED`다.
+- `REPORTED`는 초기 배정, `ASSIGNED`/`IN_PROGRESS`/`ON_HOLD`는 재배정이며 둘 다 결과 status는
+  `ASSIGNED`다. `RESOLVED`/`CLOSED`/`REJECTED`/`DUPLICATE`는 `409 INVALID_REQUEST_STATE`다.
+- 존재하지 않는 `workerId`는 `404 WORKER_NOT_FOUND`다. WORKER role이 아니거나 ACTIVE가 아닌 기존
+  사용자는 `409 INVALID_WORKER`다. payload는 정상이고 실패 원인이 참조 대상의 상태이기 때문이다.
+- 현재 active assignee에게 다시 배정하면 `409 REQUEST_ALREADY_ASSIGNED`다. active assignment unique
+  index 경합도 같은 코드이며 `VERSION_CONFLICT`로 매핑하지 않는다.
+- `409 VERSION_CONFLICT`는 submitted `version` 불일치와 request row optimistic locking 실패에만 쓴다.
+- 한 transaction이 기존 assignment 종료, 신규 assignment 생성, status 전이, RequestHistory 한 행
+  append를 모두 수행한다. 초기 배정은 `REQUEST_ASSIGNED`, 재배정은 `REQUEST_REASSIGNED`를 남긴다.
+- V1은 worker의 Dormitory를 제한하지 않는다. `admin_dormitory_scopes`는 administrator 전용이고
+  worker-dormitory mapping table이 없다.
+
+## MaintenanceRequest 읽기 가시성
+
+- RESIDENT는 `reporterId`가 본인인 request를 조회한다. 방을 옮겨도 본인이 올린 request는 계속 보이며,
+  새 입주자는 이전 입주자의 request를 보지 못한다.
+- WORKER는 본인에게 배정된 적 있는 request를 조회한다. 종료된 assignment도 포함되며, 이것이 former
+  worker의 historical read-only 경로다.
+- ADMIN은 request의 room이 해석되는 Dormitory가 본인 scope에 있는 request를 조회한다. SUPER_ADMIN은
+  전체를 조회한다. 복수 role을 가진 caller의 가시성은 합집합이다.
+- 가시성 밖 request의 단건 조회는 `404 REQUEST_NOT_FOUND`다. 존재하지 않는 경우와 응답이 같아 조회
+  경로가 request의 존재를 드러내지 않는다. Command는 wrong role, non-owner, former assignee에 대해
+  `403 ACCESS_DENIED`를 유지한다.
+- Endpoint 자체의 role·설정 실패는 `403 ACCESS_DENIED`다. WORKER가 아닌 caller의 `assigned-to-me`,
+  scope 없는 ADMIN의 listing, ADMIN scope 밖을 명시한 `dormitoryId`/`buildingId`/`spaceId` filter가
+  여기 해당한다.
+- Listing filter는 가시성을 좁히기만 하며 넓히지 않는다. 페이징은 0-based `page`와 `1..100` `size`,
+  정렬은 고정 `createdAt DESC, id DESC`이고 client sort parameter는 V1에 없다.
+
 ## Dormitory structure administration
 
 - Dormitory, Building, Space의 생성·수정·비활성화는 `SUPER_ADMIN`만 수행할 수 있다.
