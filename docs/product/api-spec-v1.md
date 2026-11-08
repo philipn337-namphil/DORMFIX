@@ -250,6 +250,40 @@ Visit commands are not version-checked in V1: `MaintenanceVisit` has no `version
 audit events are `VISIT_SCHEDULED`, `VISIT_RESCHEDULED`, `VISIT_COMPLETED`, `VISIT_CANCELED` and
 `VISIT_NO_ACCESS`, each carrying `{"visitId": <id>}` in `metadata`.
 
+### Maintenance work logs
+
+`POST /maintenance-requests/{id}/work-logs` takes
+`AppendWorkLogRequest(actionType, description, visitId?)`. It never accepts `workerId`, `createdAt`
+or `id`; `worker_id` is the JWT subject. `actionType` is one of the frozen `WorkActionType` values
+and an unparsable value is `400 VALIDATION_FAILED`. `description` is required and at most 2000
+characters.
+
+A supplied `visitId` must belong to the same request, otherwise `409 INVALID_REQUEST_STATE`; a
+missing visit is `404 VISIT_NOT_FOUND`. The visit status is not restricted, because a work log may
+describe a completed visit, a failed entry, or a cancelled attempt equally.
+
+Only the request's current active assignee appends a work log. A caller holding `WORKER` who is not
+that assignee receives `403 WORKER_NOT_ASSIGNED` and a role that cannot use the command receives
+`403 ACCESS_DENIED`. `ADMIN` and `SUPER_ADMIN` do not append work logs: `worker_id` means the person
+who did the work, and an administrator's remark belongs in a comment. The request must not be
+terminal, otherwise `409 INVALID_REQUEST_STATE`.
+
+`GET /maintenance-requests/{id}/work-logs` is staff-only. A `WORKER` with any assignment row for the
+request, current or ended, a scoped `ADMIN`, and a `SUPER_ADMIN` may read; a `RESIDENT` receives
+`403 ACCESS_DENIED`. Work logs are the internal record of the work, and `PUBLIC` comments are the
+resident-facing channel, which is the same line that keeps a `STAFF_ONLY` comment away from a
+resident. A request outside the caller's read visibility is `404 REQUEST_NOT_FOUND` as elsewhere;
+a `RESIDENT` reading their own request receives `403` instead, because they already know it exists.
+
+The list returns `WorkLogPageResponse` ordered `createdAt ASC, id ASC`, because a work log is a
+narrative that reads oldest first, unlike the visit list. `page` is zero-based with default `0` and
+`size` is `1..100` with default `20`; a violation is `400 VALIDATION_FAILED`. The item DTO is
+`WorkLogResponse(id, requestId, visitId, workerId, actionType, description, createdAt)`.
+
+Appending a work log writes no RequestHistory row and does not modify the request: no status, no
+`updated_at`, no `version`, and no version check. Work logs are append-only with no update or
+delete path.
+
 ### Structure administration
 
 All structure-management paths use the `/admin` prefix. These endpoints are part of the frozen contract but are not implemented yet.

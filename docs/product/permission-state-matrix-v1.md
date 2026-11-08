@@ -24,6 +24,26 @@ CLOSED, REJECTED, DUPLICATE는 terminal이다. 다른 transition은 허용하지
 - ADMIN: dormitory scope의 전체 request 조회, active request의 허용된 category/priority/location 조정, assign/reassign, REPORTED reject/duplicate, visit 관리, RESOLVED close/reopen, scope 내 Facility 관리와 Facility status command 수행. Resident entry consent를 대신 변경하지 않으며 MaintenanceCategory를 관리하지 않는다.
 - SUPER_ADMIN: ADMIN 기능과 전체 Dormitory/Building/Space/Facility, user-role 및 전역 system/master-data 관리를 가진다. MaintenanceCategory는 V1 전역 Master Data이므로 SUPER_ADMIN 전용이다. 모든 domain state rule은 동일하게 적용된다.
 
+## WorkLog 세부
+
+- 작성은 `AppendWorkLogRequest(actionType, description, visitId?)`를 받고 `worker_id`는 JWT
+  subject다. `actionType`은 frozen `WorkActionType` 다섯 값 중 하나이며 `description`은 필수,
+  최대 2000자다.
+- 작성은 request의 current active assignee만 한다. `WORKER`이지만 그 assignee가 아니면
+  `403 WORKER_NOT_ASSIGNED`, 해당 command를 쓸 수 없는 role은 `403 ACCESS_DENIED`다. `ADMIN`과
+  `SUPER_ADMIN`은 WorkLog를 작성하지 않는다. `worker_id`는 작업을 한 사람을 뜻하고 administrator의
+  메모는 comment에 속한다. request가 terminal이면 `409 INVALID_REQUEST_STATE`다.
+- `visitId`를 제공하면 같은 request의 visit이어야 한다. 불일치는 `409 INVALID_REQUEST_STATE`,
+  미존재는 `404 VISIT_NOT_FOUND`다. Visit status는 제한하지 않는다.
+- 읽기는 staff 전용이다. request의 assignment row를 가진 `WORKER`(현재든 종료든), scope 안의
+  `ADMIN`, `SUPER_ADMIN`이 읽는다. `RESIDENT`는 `403 ACCESS_DENIED`다. WorkLog는 내부 작업 기록이고
+  resident를 향한 창구는 `PUBLIC` comment다. 가시성 밖 request는 `404 REQUEST_NOT_FOUND`이지만,
+  자기 request를 읽는 `RESIDENT`는 존재를 이미 알고 있으므로 `403`을 받는다.
+- 목록은 `createdAt ASC, id ASC` 정렬이다. WorkLog는 작업의 서술이라 오래된 것부터 읽는다.
+  페이징은 0-based `page`와 `1..100` `size`(default 20)이며 위반은 `400 VALIDATION_FAILED`다.
+- WorkLog 추가는 RequestHistory를 남기지 않고 request를 수정하지 않는다. status, `updated_at`,
+  `version`을 바꾸지 않으며 version을 검사하지 않는다. append-only이고 update/delete 경로가 없다.
+
 ## MaintenanceVisit 세부
 
 - Scheduling은 `ScheduleVisitRequest(scheduledStart, scheduledEnd, note?)`를 받는다. `worker_id`는

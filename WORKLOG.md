@@ -1,5 +1,66 @@
 # DormFix 작업 로그
 
+## 2026-11-08 - WorkLog 슬라이스 구현
+
+- 브랜치: `feature/maintenance-work-log`를 `feature/maintenance-visit` 위에 스택했다. V10의
+  `visit_id` FK가 V9의 `maintenance_visit`을 필요로 하므로 `main`에서는 뜰 수 없다. PR #19가
+  머지되면 `main`으로 리베이스된다.
+- 조사 중 정정: `WorkActionType`이 정의되지 않았을 것으로 의심했으나 **Frozen ERD의 enum 표에 이미
+  있었다** (`INSPECTION`, `REPAIR`, `REPLACEMENT`, `TEST`, `NOTE`). 결정 범위가 그만큼 좁았다.
+- 사용자 승인으로 `ADR-024`를 Accepted로 전환했다. 읽기를 staff 전용으로 두는 것과 `ADMIN`이
+  작성하지 않는 것이 제안대로 확정되었다. Frozen API specification, permission matrix, ERD(V10 물리
+  규칙)에 동기화하고 baseline hash 3건을 재계산했다. Q08은 resolved다.
+- `V10__work_log.sql`: ERD대로 `work_log`를 만들고 request/visit/worker FK 모두 ON DELETE RESTRICT,
+  `action_type` CHECK, `description` NOT NULL TEXT를 두었다. 목록용 `(request_id, created_at)`과
+  `(visit_id)` index를 추가했다. **`ck_request_history_event_type`은 교체하지 않았다** — WorkLog
+  추가가 RequestHistory를 남기지 않기 때문이다. V7/V8/V9가 연속으로 교체해 온 제약이 이번에는
+  그대로다.
+- Domain: `WorkLog`는 모든 column을 `updatable = false`로 매핑하고 mutator를 두지 않아 append-only를
+  코드에서도 고정한다. `WorkActionType` enum을 추가했다.
+- Application: `WorkLogService`가 append와 목록을 제공한다. 인가를 state·reference 검증보다 먼저
+  수행한다. 작성은 current active assignee만 하고 `ADMIN`은 `403 ACCESS_DENIED`다. 읽기는 staff
+  전용이며 `RESIDENT`는 `403`이다. `visitId`가 같은 request의 visit인지 application에서 검증한다 —
+  제약이 두 행에 걸쳐 있어 FK로는 표현할 수 없다.
+- API: 경로 둘을 추가하고 `SecurityConfiguration`에 POST/GET을 각각 등록했다.
+  `AppendWorkLogRequest.description`에 `@Size(max = 2000)`을 두었다. ERD가 `TEXT`만 말하지만 DTO
+  상한이 없으면 무제한 저장되므로 AGENTS.md의 신규 코드 규칙을 따랐다. 새 error code는 없다.
+
+### ADR-024에서 기록한 설계 판단
+
+- WorkLog 추가는 request를 전혀 수정하지 않는다. status, `updated_at`, `version`을 바꾸지 않고
+  version을 검사하지도 않는다. 새 행만 추가하므로 분실 갱신이 있을 수 없다. 테스트가 request status,
+  version, RequestHistory 개수가 모두 불변임을 확인한다.
+- 목록은 `createdAt ASC, id ASC`다. WorkLog는 작업의 서술이라 오래된 것부터 읽어야 이야기가 된다.
+  Visit 목록이 `scheduledStart DESC`인 것과 의도적으로 다르다.
+- WorkLog 목록은 페이징하고 Visit 목록은 하지 않는다. Visit은 열린 visit 하나 규칙이 개수를 제한하는데
+  WorkLog에는 그런 제한이 없다. 다만 취소·완료된 visit도 누적될 수 있으므로 Visit 쪽 논리가 완전하지
+  않다는 점을 ADR-024 대안 6번에 약점으로 적었다.
+- terminal request 거부 규칙은 실무상 도달 불가다. terminal 전이가 assignment를 종료하므로 작성
+  권한이 먼저 `403`으로 끊긴다. ADR-022가 같은 종류의 공문구 규칙을 세 전이 모두에 유지한 것과 같은
+  이유로 명시하고 강제했다. 테스트는 닫힌 request에서 `403`이 나오고 행이 생기지 않음을 확인한다.
+
+### 검증 결과
+
+- 요청 순서대로 전부 통과했다: `gradlew --stop`(No Gradle daemons are running) →
+  `python scripts/check_repository.py` → `git diff --check`(기존 LF/CRLF 경고만) →
+  `check bootJar --no-daemon --console=plain` → `integrationTest --no-daemon --console=plain`.
+- 최종 integrationTest 집계: **20 suites, 118 tests, 0 failures, 0 errors, 0 skipped.** WorkLog
+  신규 기여는 15다. 이번 슬라이스는 통합 테스트 첫 실행에서 실패가 없었다.
+- 캐시나 빌드 산출물을 삭제하지 않았고 commit, push, reset, checkout을 수행하지 않았다.
+
+### 남은 작업과 주의사항
+
+- 커밋되지 않은 변경이 `feature/maintenance-work-log`에 남아 있다. 커밋·push·PR은 요청 시에만 한다.
+  PR은 #19가 머지된 뒤 `main`을 대상으로 올리는 것이 깔끔하다.
+- Phase 3 남은 범위: comment, attachment, 신고 metadata PATCH. Comment는 `CommentVisibility`와
+  soft-delete 정책을 함께 결정해야 하고, attachment는 S3 presigned(ADR-008/010)가 얽혀 가장 크다.
+- 열린 PR: #19(Visit + ADR 번역), #9(setup-java, dependabot 리베이스 대기),
+  #16(Gradle 9.8.2, `check_repository.py:31-32` 해시 2건 갱신이 필요한 전용 작업).
+- 전체 코드리뷰는 Phase 3 완료 후 인증 슬라이스부터 하나씩 수행한다. 생성 슬라이스 deferred 지적
+  1·2·3·5·6·8번이 그대로 남아 있다.
+- 사용자 지시: 앞으로 ADR과 PR 본문은 한국어로 쓴다. Frozen 계약 문서(`api-spec-v1.md`,
+  `erd-v1.md`)와 커밋 메시지는 영어를 유지한다.
+
 ## 2026-11-07 - Visit 슬라이스 구현
 
 - 사용자 승인으로 ADR-023을 Accepted로 전환했다. `complete`의 actual timestamp를 client가 제공하는

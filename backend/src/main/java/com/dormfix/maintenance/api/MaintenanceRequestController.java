@@ -11,7 +11,9 @@ import com.dormfix.maintenance.application.MaintenanceRequestQueryService;
 import com.dormfix.maintenance.application.MaintenanceVisitService;
 import com.dormfix.maintenance.application.ScheduleVisitCommand;
 import com.dormfix.maintenance.application.UpdateVisitCommand;
+import com.dormfix.maintenance.application.AppendWorkLogCommand;
 import com.dormfix.maintenance.application.VisitOutcomeCommand;
+import com.dormfix.maintenance.application.WorkLogService;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.LinkedHashSet;
@@ -39,16 +41,19 @@ public class MaintenanceRequestController {
     private final MaintenanceRequestAssignmentService assignments;
     private final MaintenanceRequestLifecycleService lifecycle;
     private final MaintenanceVisitService visits;
+    private final WorkLogService workLogs;
 
     public MaintenanceRequestController(MaintenanceRequestCreationService creation,
             MaintenanceRequestQueryService queries,
             MaintenanceRequestAssignmentService assignments,
-            MaintenanceRequestLifecycleService lifecycle, MaintenanceVisitService visits) {
+            MaintenanceRequestLifecycleService lifecycle, MaintenanceVisitService visits,
+            WorkLogService workLogs) {
         this.creation = creation;
         this.queries = queries;
         this.assignments = assignments;
         this.lifecycle = lifecycle;
         this.visits = visits;
+        this.workLogs = workLogs;
     }
 
     @PostMapping(BASE)
@@ -201,6 +206,21 @@ public class MaintenanceRequestController {
             @Valid @RequestBody VisitOutcomeRequest value, @AuthenticationPrincipal Jwt jwt) {
         return VisitResponse.forStaff(visits.cancel(
                 new VisitOutcomeCommand(visitId, null, null, value.note()), id(jwt), roles(jwt)));
+    }
+
+    @PostMapping(BASE + "/{id}/work-logs")
+    public WorkLogResponse appendWorkLog(@PathVariable Long id,
+            @Valid @RequestBody AppendWorkLogRequest value, @AuthenticationPrincipal Jwt jwt) {
+        return WorkLogResponse.from(workLogs.append(new AppendWorkLogCommand(id,
+                value.actionType(), value.description(), value.visitId()), id(jwt), roles(jwt)));
+    }
+
+    @GetMapping(BASE + "/{id}/work-logs")
+    public WorkLogPageResponse listWorkLogs(@PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size, @AuthenticationPrincipal Jwt jwt) {
+        return WorkLogPageResponse
+                .from(workLogs.listForRequest(id, page, size, id(jwt), roles(jwt)));
     }
 
     private LifecycleCommand command(Long id, LifecycleCommandRequest value) {

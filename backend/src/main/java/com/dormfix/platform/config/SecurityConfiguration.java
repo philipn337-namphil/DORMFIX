@@ -49,9 +49,11 @@ public class SecurityConfiguration {
                                 "/api/v1/maintenance-requests/*/visits",
                                 "/api/v1/visits/*/complete",
                                 "/api/v1/visits/*/no-access",
-                                "/api/v1/visits/*/cancel")
+                                "/api/v1/visits/*/cancel",
+                                "/api/v1/maintenance-requests/*/work-logs")
                         .authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/maintenance-requests/*/visits")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/maintenance-requests/*/visits",
+                                "/api/v1/maintenance-requests/*/work-logs")
                         .authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/visits/*").authenticated()
                         .requestMatchers("/api/v1/admin/**").authenticated()

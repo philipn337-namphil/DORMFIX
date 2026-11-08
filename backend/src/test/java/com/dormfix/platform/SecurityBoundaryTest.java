@@ -17,6 +17,7 @@ import com.dormfix.maintenance.application.MaintenanceRequestAssignmentService;
 import com.dormfix.maintenance.application.MaintenanceRequestCreationService;
 import com.dormfix.maintenance.application.MaintenanceRequestLifecycleService;
 import com.dormfix.maintenance.application.MaintenanceVisitService;
+import com.dormfix.maintenance.application.WorkLogService;
 import com.dormfix.maintenance.application.MaintenanceRequestQueryService;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
@@ -70,6 +71,8 @@ class SecurityBoundaryTest {
     @MockitoBean
     private MaintenanceVisitService maintenanceVisitService;
     @MockitoBean
+    private WorkLogService workLogService;
+    @MockitoBean
     private JwtDecoder jwtDecoder;
     @MockitoBean
     private JwtAuthenticationConverter jwtAuthenticationConverter;
@@ -94,14 +97,13 @@ class SecurityBoundaryTest {
     /**
      * A privileged role gains no authority over a frozen path that is not implemented yet. The
      * lifecycle commands this test used to target are now implemented under ADR-022, so it points
-     * at paths that are still unimplemented: request metadata PATCH, work logs, comments
+     * at paths that are still unimplemented: request metadata PATCH, comments
      * and attachments. Their authorization is covered by their own slices once they exist.
      */
     @Test
     @WithMockUser(roles = "SUPER_ADMIN")
     void skeletonNeverPretendsBusinessAuthorizationIsImplemented() throws Exception {
         for (String unimplemented : java.util.List.of(
-                "/api/v1/maintenance-requests/1/work-logs",
                 "/api/v1/maintenance-requests/1/comments",
                 "/api/v1/maintenance-requests/1/attachments")) {
             mvc.perform(post(unimplemented))
@@ -122,7 +124,7 @@ class SecurityBoundaryTest {
     @WithMockUser(roles = "SUPER_ADMIN")
     void implementedLifecyclePathsAreNoLongerBlockedByTheDenyAllDefault() throws Exception {
         for (String command : java.util.List.of("start", "hold", "resume", "resolve", "close",
-                "reopen", "reject", "mark-duplicate", "assignments", "visits")) {
+                "reopen", "reject", "mark-duplicate", "assignments", "visits", "work-logs")) {
             mvc.perform(post("/api/v1/maintenance-requests/1/" + command))
                     .andExpect(result -> org.assertj.core.api.Assertions
                             .assertThat(result.getResponse().getStatus()).isNotEqualTo(403));

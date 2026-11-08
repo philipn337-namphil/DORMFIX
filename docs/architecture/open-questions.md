@@ -4,6 +4,29 @@
 
 각 질문은 소유 feature slice에서 evidence와 함께 검토하고, 필요하면 proposed ADR로 올린다. 승인 전에는 기존 state, permission, ERD, API semantics를 유지한다.
 
+## Resolved WorkLog 계약
+
+2026-11-08 human approval으로 [ADR-024](../adr/ADR-024-work-log-contract.md)의 V1 WorkLog 계약을
+확정했다. Q08은 resolved 되었다. "Read permitted WorkLogs"가 가리키는 role, `ADMIN`의 작성 가능
+여부, create DTO와 목록 규칙의 공백이 아래로 닫혔다.
+
+- create DTO는 `AppendWorkLogRequest(actionType, description, visitId?)`이고 `worker_id`는 JWT
+  subject다. `description`은 필수이며 최대 2000자다.
+- 작성은 current active assignee만 한다. `ADMIN`과 `SUPER_ADMIN`은 작성하지 않는다. WorkLog의
+  `worker_id`는 "이 작업을 한 사람"이고 administrator의 메모는 comment에 속한다.
+- 읽기는 staff 전용이다. assignment row를 가진 `WORKER`(종료 포함), scope 안의 `ADMIN`,
+  `SUPER_ADMIN`이 읽고 `RESIDENT`는 `403 ACCESS_DENIED`다. WorkLog에 가시성 column이 없으므로
+  "permitted" 필터는 role 수준이다.
+- `visitId`는 같은 request의 visit이어야 하며 status는 제한하지 않는다. 불일치는 `409`, 미존재는
+  `404 VISIT_NOT_FOUND`다.
+- 목록은 `createdAt ASC, id ASC` 정렬이고 `page`/`size`로 페이징한다. Visit 목록이 페이징하지 않는
+  것과 다른 이유는 열린 visit 하나 규칙 같은 제한이 WorkLog에 없기 때문이다.
+- WorkLog 추가는 RequestHistory를 남기지 않고 request를 수정하지 않는다. 따라서 V10은
+  `ck_request_history_event_type`을 교체하지 않는다.
+
+전체 DTO, 권한, 가시성, 정렬과 페이징, V10 물리 규칙은 Frozen API specification과 permission
+matrix, ERD에 동기화되어 있다.
+
 ## Resolved MaintenanceVisit contract
 
 2026-11-07 human approval으로 [ADR-023](../adr/ADR-023-maintenance-visit-contract.md)의 V1 Visit
