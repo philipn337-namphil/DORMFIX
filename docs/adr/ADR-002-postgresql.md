@@ -6,20 +6,20 @@ Date: 2026-09-10
 
 ## Context / 배경
 
-The frozen ERD requires TIMESTAMPTZ, JSONB, relational integrity and practical partial unique indexes.
+Frozen ERD는 TIMESTAMPTZ, JSONB, 관계 무결성, 그리고 실용적인 partial unique index를 요구한다.
 
 ## Decision / 결정
 
-Use PostgreSQL 17 for local/Testcontainers and a compatible supported RDS PostgreSQL version for deployment. Start from pinned postgres:17.6-alpine, updating patches through review.
+local과 Testcontainers에는 PostgreSQL 17을 쓰고, 배포에는 호환되는 지원 버전의 RDS PostgreSQL을 쓴다. 고정한 postgres:17.6-alpine에서 시작하고 patch 갱신은 리뷰를 거친다.
 
 ## Alternatives / 대안
 
-H2 is not faithful for constraints/time/JSONB. MySQL would change DB capabilities. A document database would weaken the approved model.
+H2는 제약, 시간, JSONB를 충실히 재현하지 못한다. MySQL은 DB 역량 자체를 바꾼다. Document database는 승인된 모델을 약화시킨다.
 
 ## Trade-offs / 장단점
 
-Real integration tests need Docker; this cost is justified for assignment concurrency and migration fidelity.
+실제 integration test에는 Docker가 필요하다. Assignment 동시성과 migration 충실도를 생각하면 이 비용은 정당하다.
 
 ## Consequences / 결과
 
-Schema constraints and indexes are tested against PostgreSQL. RDS major/patch compatibility is checked before provisioning; no cloud instance is created now.
+Schema 제약과 index는 PostgreSQL을 대상으로 테스트한다. RDS major/patch 호환성은 provisioning 전에 확인하며, 지금 cloud instance를 만들지는 않는다.

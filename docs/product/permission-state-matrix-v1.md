@@ -24,6 +24,33 @@ CLOSED, REJECTED, DUPLICATE는 terminal이다. 다른 transition은 허용하지
 - ADMIN: dormitory scope의 전체 request 조회, active request의 허용된 category/priority/location 조정, assign/reassign, REPORTED reject/duplicate, visit 관리, RESOLVED close/reopen, scope 내 Facility 관리와 Facility status command 수행. Resident entry consent를 대신 변경하지 않으며 MaintenanceCategory를 관리하지 않는다.
 - SUPER_ADMIN: ADMIN 기능과 전체 Dormitory/Building/Space/Facility, user-role 및 전역 system/master-data 관리를 가진다. MaintenanceCategory는 V1 전역 Master Data이므로 SUPER_ADMIN 전용이다. 모든 domain state rule은 동일하게 적용된다.
 
+## MaintenanceVisit 세부
+
+- Scheduling은 `ScheduleVisitRequest(scheduledStart, scheduledEnd, note?)`를 받는다. `worker_id`는
+  request의 current active assignee에서 서버가 유도하고 `created_by_id`는 JWT subject다. client가
+  worker를 지정하지 않는다.
+- Scheduling은 active assignment와 `ASSIGNED`/`IN_PROGRESS`/`ON_HOLD` request를 요구한다. 아니면
+  `409 INVALID_REQUEST_STATE`다. 시각 둘은 필수이고 `scheduledStart < scheduledEnd`여야 하며 아니면
+  `400 INVALID_VISIT_TIME`다. 과거 구간은 허용한다.
+- request당 `SCHEDULED` visit은 최대 하나이며 partial unique index로 보강한다. 열린 visit이 있는
+  상태의 두 번째 scheduling은 `409 INVALID_REQUEST_STATE`다.
+- PATCH 허용 필드는 `scheduledStart`, `scheduledEnd`, `note`뿐이다. `status`, `workerId`,
+  `requestId`, actual timestamp, consent snapshot은 변경할 수 없다. `SCHEDULED`만 patch 가능하다.
+- `complete`는 `actualStartedAt`과 `actualEndedAt`을 client가 둘 다 제공한다. `no-access`와
+  `cancel`은 `note`를 필수로 받고 actual timestamp를 쓰지 않는다. 세 결과 모두 visit에 terminal이며
+  request status를 바꾸지 않는다.
+- `complete`와 `no-access`는 request가 terminal이면 `409 INVALID_REQUEST_STATE`다. `cancel`은
+  `SCHEDULED` visit에 항상 가능하다.
+- Scheduling, patch, 세 outcome command는 current active assignee 또는 scope 안의
+  `ADMIN`/`SUPER_ADMIN`이 수행한다. WORKER이지만 current assignee가 아니면
+  `403 WORKER_NOT_ASSIGNED`, 해당 command를 쓸 수 없는 role은 `403 ACCESS_DENIED`다. 인가는 state
+  검사보다 먼저 평가한다. 없는 visit은 `404 VISIT_NOT_FOUND`다.
+- `RESIDENT`는 visit을 읽기만 하고 목록에서 `note`를 받지 않는다. `note`는 완료·취소·진입실패
+  시점의 staff free-text다. 가시성은 request read 가시성을 재사용하므로 가시성 밖 request는
+  `404 REQUEST_NOT_FOUND`다. 목록은 `scheduledStart DESC, id DESC` 정렬이고 페이징하지 않는다.
+- Visit command는 V1에서 version을 검사하지 않는다. Audit event는 `VISIT_SCHEDULED`,
+  `VISIT_RESCHEDULED`, `VISIT_COMPLETED`, `VISIT_CANCELED`, `VISIT_NO_ACCESS`다.
+
 ## MaintenanceRequest lifecycle command 세부
 
 - Command DTO는 `LifecycleCommandRequest(statusReason?, version)`이고 `mark-duplicate`만

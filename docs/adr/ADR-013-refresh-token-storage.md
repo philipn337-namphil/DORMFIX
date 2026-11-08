@@ -1,4 +1,4 @@
-# ADR-013: Refresh-token persistence gap
+# ADR-013: Refresh-token 저장소 공백
 
 Status: Accepted - implementation pending
 
@@ -6,7 +6,7 @@ Date: 2026-09-10
 
 ## Context / 배경
 
-Frozen endpoints require refresh/logout, but the 15-entity ERD has no refresh-token persistence or revocation model.
+Frozen endpoint는 refresh와 logout을 요구하지만, 15개 entity로 구성된 ERD에는 refresh-token 저장소나 revocation model이 없다.
 
 ## Decision / 결정
 
@@ -29,11 +29,11 @@ Authentication 정책으로 다음을 확정한다.
 
 ## Alternatives / 대안
 
-Pure stateless refresh tokens cannot provide strong immediate rotation/reuse/logout revocation alone. Redis, token family, `replaced_by` 구조는 V1에서 사용하지 않는다. Managed identity provider는 auth ownership을 변경하므로 별도 결정 대상이다.
+순수 stateless refresh token만으로는 즉각적인 rotation, 재사용 거부, logout revocation을 강하게 보장할 수 없다. Redis, token family, `replaced_by` 구조는 V1에서 사용하지 않는다. Managed identity provider는 auth 소유권 자체를 바꾸므로 별도 결정 대상이다.
 
 ## Trade-offs / 장단점
 
-PostgreSQL 저장소와 revoke/rotation 상태는 refresh/logout을 지원하지만 추가 migration과 운영 고려가 필요하다. V1은 JSON body 전달을 사용하고 cookie/CSRF 선택은 하지 않는다.
+PostgreSQL 저장소와 revoke/rotation 상태는 refresh/logout을 지원하지만 추가 migration과 운영 고려가 필요하다. V1은 JSON body 전달을 사용하고 cookie와 CSRF 선택은 하지 않는다.
 
 ## Consequences / 결과
 

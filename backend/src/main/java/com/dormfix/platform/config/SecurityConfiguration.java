@@ -45,8 +45,15 @@ public class SecurityConfiguration {
                                 "/api/v1/maintenance-requests/*/close",
                                 "/api/v1/maintenance-requests/*/reopen",
                                 "/api/v1/maintenance-requests/*/reject",
-                                "/api/v1/maintenance-requests/*/mark-duplicate")
+                                "/api/v1/maintenance-requests/*/mark-duplicate",
+                                "/api/v1/maintenance-requests/*/visits",
+                                "/api/v1/visits/*/complete",
+                                "/api/v1/visits/*/no-access",
+                                "/api/v1/visits/*/cancel")
                         .authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/maintenance-requests/*/visits")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/visits/*").authenticated()
                         .requestMatchers("/api/v1/admin/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/dormitories",
                                 "/api/v1/dormitories/*/buildings", "/api/v1/buildings/*/spaces",

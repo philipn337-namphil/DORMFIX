@@ -1,4 +1,4 @@
-# ADR-010: Ubuntu EC2 first deployment
+# ADR-010: 첫 배포는 Ubuntu EC2
 
 Status: Selected for foundation review (engineering baseline; product requirements remain frozen)
 
@@ -6,20 +6,20 @@ Date: 2026-09-10
 
 ## Context / 배경
 
-Learning real Linux operations is a project goal and the approved deployment path uses AWS.
+실제 Linux 운영을 익히는 것이 이 프로젝트의 목표이고, 승인된 배포 경로는 AWS를 쓴다.
 
 ## Decision / 결정
 
-Plan Ubuntu EC2 with host Nginx, Docker app, private RDS and S3. Do not provision anything during foundation.
+Host Nginx, Docker app, private RDS, S3로 구성한 Ubuntu EC2를 계획한다. Foundation 동안에는 아무것도 provisioning하지 않는다.
 
 ## Alternatives / 대안
 
-Managed ECS may be useful later but bypasses some initial server operations learning. Kubernetes is disproportionate.
+Managed ECS는 나중에 쓸 만하지만 초기 server 운영 학습의 일부를 건너뛰게 한다. Kubernetes는 규모에 맞지 않는다.
 
 ## Trade-offs / 장단점
 
-Single-host deployment has downtime/availability limits; patching, backups, TLS renewal, monitoring and reboot recovery are operator responsibilities.
+단일 host 배포는 downtime과 가용성에 한계가 있다. Patch, backup, TLS 갱신, monitoring, 재부팅 복구는 운영자 책임이다.
 
 ## Consequences / 결과
 
-Keep network/secret/migration/rollback runbooks explicit. ECR/ECS and SQS are later phases.
+Network, secret, migration, rollback runbook을 명시적으로 유지한다. ECR/ECS와 SQS는 이후 단계다.
