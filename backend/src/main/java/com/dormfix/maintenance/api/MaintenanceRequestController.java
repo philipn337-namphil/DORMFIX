@@ -8,6 +8,10 @@ import com.dormfix.maintenance.application.MaintenanceRequestCreationService;
 import com.dormfix.maintenance.application.MaintenanceRequestLifecycleService;
 import com.dormfix.maintenance.application.MaintenanceRequestQuery;
 import com.dormfix.maintenance.application.MaintenanceRequestQueryService;
+import com.dormfix.maintenance.application.MaintenanceVisitService;
+import com.dormfix.maintenance.application.ScheduleVisitCommand;
+import com.dormfix.maintenance.application.UpdateVisitCommand;
+import com.dormfix.maintenance.application.VisitOutcomeCommand;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.LinkedHashSet;
@@ -18,6 +22,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,20 +32,23 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class MaintenanceRequestController {
     private static final String BASE = "/api/v1/maintenance-requests";
+    private static final String VISITS = "/api/v1/visits";
 
     private final MaintenanceRequestCreationService creation;
     private final MaintenanceRequestQueryService queries;
     private final MaintenanceRequestAssignmentService assignments;
     private final MaintenanceRequestLifecycleService lifecycle;
+    private final MaintenanceVisitService visits;
 
     public MaintenanceRequestController(MaintenanceRequestCreationService creation,
             MaintenanceRequestQueryService queries,
             MaintenanceRequestAssignmentService assignments,
-            MaintenanceRequestLifecycleService lifecycle) {
+            MaintenanceRequestLifecycleService lifecycle, MaintenanceVisitService visits) {
         this.creation = creation;
         this.queries = queries;
         this.assignments = assignments;
         this.lifecycle = lifecycle;
+        this.visits = visits;
     }
 
     @PostMapping(BASE)
@@ -148,6 +156,51 @@ public class MaintenanceRequestController {
             @Valid @RequestBody MarkDuplicateRequest value, @AuthenticationPrincipal Jwt jwt) {
         return MaintenanceRequestResponse.from(lifecycle.markDuplicate(new LifecycleCommand(id,
                 value.statusReason(), value.duplicateOfId(), value.version()), id(jwt), roles(jwt)));
+    }
+
+    @PostMapping(BASE + "/{id}/visits")
+    public VisitResponse scheduleVisit(@PathVariable Long id,
+            @Valid @RequestBody ScheduleVisitRequest value, @AuthenticationPrincipal Jwt jwt) {
+        return VisitResponse.forStaff(visits.schedule(new ScheduleVisitCommand(id,
+                value.scheduledStart(), value.scheduledEnd(), value.note()), id(jwt), roles(jwt)));
+    }
+
+    @GetMapping(BASE + "/{id}/visits")
+    public VisitListResponse listVisits(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        Set<String> roles = roles(jwt);
+        return VisitListResponse.from(visits.listForRequest(id, id(jwt), roles), roles);
+    }
+
+    @PatchMapping(VISITS + "/{visitId}")
+    public VisitResponse updateVisit(@PathVariable Long visitId,
+            @Valid @RequestBody UpdateVisitRequest value, @AuthenticationPrincipal Jwt jwt) {
+        // A supplied note replaces the stored one; omitting it leaves the note alone. V1 has no
+        // path that clears a note, which the contract does not ask for.
+        return VisitResponse.forStaff(visits.update(new UpdateVisitCommand(visitId,
+                value.scheduledStart(), value.scheduledEnd(), value.note(), value.note() != null),
+                id(jwt), roles(jwt)));
+    }
+
+    @PostMapping(VISITS + "/{visitId}/complete")
+    public VisitResponse completeVisit(@PathVariable Long visitId,
+            @Valid @RequestBody CompleteVisitRequest value, @AuthenticationPrincipal Jwt jwt) {
+        return VisitResponse.forStaff(visits.complete(new VisitOutcomeCommand(visitId,
+                value.actualStartedAt(), value.actualEndedAt(), value.note()), id(jwt),
+                roles(jwt)));
+    }
+
+    @PostMapping(VISITS + "/{visitId}/no-access")
+    public VisitResponse visitNoAccess(@PathVariable Long visitId,
+            @Valid @RequestBody VisitOutcomeRequest value, @AuthenticationPrincipal Jwt jwt) {
+        return VisitResponse.forStaff(visits.recordNoAccess(
+                new VisitOutcomeCommand(visitId, null, null, value.note()), id(jwt), roles(jwt)));
+    }
+
+    @PostMapping(VISITS + "/{visitId}/cancel")
+    public VisitResponse cancelVisit(@PathVariable Long visitId,
+            @Valid @RequestBody VisitOutcomeRequest value, @AuthenticationPrincipal Jwt jwt) {
+        return VisitResponse.forStaff(visits.cancel(
+                new VisitOutcomeCommand(visitId, null, null, value.note()), id(jwt), roles(jwt)));
     }
 
     private LifecycleCommand command(Long id, LifecycleCommandRequest value) {

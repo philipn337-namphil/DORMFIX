@@ -9,11 +9,13 @@ import com.dormfix.location.application.SpaceNotFoundException;
 import com.dormfix.maintenance.application.InvalidEntryPolicyException;
 import com.dormfix.maintenance.application.InvalidMaintenanceQueryException;
 import com.dormfix.maintenance.application.InvalidPreferredVisitTimeException;
+import com.dormfix.maintenance.application.InvalidVisitTimeException;
 import com.dormfix.maintenance.application.InvalidWorkerException;
 import com.dormfix.maintenance.application.MaintenanceRequestConflictException;
 import com.dormfix.maintenance.application.MaintenanceRequestNotFoundException;
 import com.dormfix.maintenance.application.RequestAlreadyAssignedException;
 import com.dormfix.maintenance.application.RequestVersionConflictException;
+import com.dormfix.maintenance.application.VisitNotFoundException;
 import com.dormfix.maintenance.application.WorkerNotAssignedException;
 import com.dormfix.maintenance.application.WorkerNotFoundException;
 import com.dormfix.platform.api.ApiError;
@@ -37,7 +39,8 @@ public class MaintenanceRequestExceptionHandler {
     @ExceptionHandler({SpaceNotFoundException.class, BuildingNotFoundException.class,
             DormitoryNotFoundException.class, FacilityNotFoundException.class,
             MaintenanceCategoryNotFoundException.class, UserNotFoundException.class,
-            MaintenanceRequestNotFoundException.class, WorkerNotFoundException.class})
+            MaintenanceRequestNotFoundException.class, WorkerNotFoundException.class,
+            VisitNotFoundException.class})
     ResponseEntity<ApiError> notFound(RuntimeException error, HttpServletRequest request) {
         return response(request, HttpStatus.NOT_FOUND, code(error), "Resource was not found.", List.of());
     }
@@ -121,6 +124,13 @@ public class MaintenanceRequestExceptionHandler {
                 List.of());
     }
 
+    @ExceptionHandler(InvalidVisitTimeException.class)
+    ResponseEntity<ApiError> invalidVisitTime(InvalidVisitTimeException error,
+            HttpServletRequest request) {
+        return response(request, HttpStatus.BAD_REQUEST, "INVALID_VISIT_TIME", error.getMessage(),
+                List.of());
+    }
+
     @ExceptionHandler(InvalidPreferredVisitTimeException.class)
     ResponseEntity<ApiError> invalidPreferredVisitTime(HttpServletRequest request) {
         return response(request, HttpStatus.BAD_REQUEST, "INVALID_VISIT_TIME",
@@ -168,6 +178,9 @@ public class MaintenanceRequestExceptionHandler {
         }
         if (error instanceof WorkerNotFoundException) {
             return "WORKER_NOT_FOUND";
+        }
+        if (error instanceof VisitNotFoundException) {
+            return "VISIT_NOT_FOUND";
         }
         // No guessed default: an unmapped type must not silently answer with another frozen code.
         throw new IllegalStateException("Unmapped not-found exception: " + error.getClass());

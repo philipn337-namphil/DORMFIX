@@ -4,6 +4,30 @@
 
 각 질문은 소유 feature slice에서 evidence와 함께 검토하고, 필요하면 proposed ADR로 올린다. 승인 전에는 기존 state, permission, ERD, API semantics를 유지한다.
 
+## Resolved MaintenanceVisit contract
+
+2026-11-07 human approval으로 [ADR-023](../adr/ADR-023-maintenance-visit-contract.md)의 V1 Visit
+계약을 확정했다. Q07은 resolved 되었다. ERD가 "These examples are not a complete enum
+declaration"으로 열어둔 history event 집합과 command DTO 수준의 공백이 아래로 닫혔다.
+
+- `worker_id`는 client가 지정하지 않고 request의 current active assignee에서 서버가 유도한다.
+  `created_by_id`는 JWT subject다. 따라서 scheduling은 active assignment를 요구한다.
+- request당 `SCHEDULED` visit은 최대 하나이며 partial unique index로 보강한다.
+- PATCH 허용 필드는 `scheduledStart`/`scheduledEnd`/`note`뿐이다. status, worker, actual
+  timestamp, consent snapshot은 변경할 수 없다. 시간은 둘 다 또는 둘 다 아니다.
+- `complete`는 actual timestamp 두 개를 client가 제공한다. `no-access`와 `cancel`은 `note`를
+  필수로 받고 actual timestamp를 쓰지 않는다.
+- `complete`/`no-access`는 request가 terminal이면 `409`다. `cancel`은 항상 가능해 닫힌 request에
+  남은 열린 visit을 정리할 수 있다.
+- 과거 시각 scheduling은 허용한다. 이미 다녀온 visit을 기록해야 하기 때문이다.
+- RESIDENT는 visit 목록에서 `note`를 받지 않는다. Frozen matrix가 주는 것은 schedule이고 `note`는
+  staff free-text다. 목록은 `scheduledStart DESC, id DESC` 정렬이며 페이징이 없다.
+- visit command는 V1에서 version을 검사하지 않는다. ERD에 `version` 컬럼이 없다.
+- 5개 event type을 추가하며 V9가 `ck_request_history_event_type`을 다시 교체한다.
+
+전체 DTO, 권한, 가시성, 정렬, V9 물리 규칙은 Frozen API specification과 permission matrix, ERD에
+동기화되어 있다.
+
 ## Resolved MaintenanceRequest lifecycle command contract
 
 2026-11-04 human approval으로 [ADR-022](../adr/ADR-022-maintenance-request-lifecycle-command-contract.md)의

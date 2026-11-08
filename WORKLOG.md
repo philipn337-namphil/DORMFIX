@@ -1,5 +1,106 @@
 # DormFix 작업 로그
 
+## 2026-11-07 - Visit 슬라이스 구현
+
+- 사용자 승인으로 ADR-023을 Accepted로 전환했다. `complete`의 actual timestamp를 client가 제공하는
+  것과 `RESIDENT`가 목록에서 `note`를 받지 않는 것이 제안대로 확정되었다. Frozen API specification,
+  permission matrix, ERD(V9 물리 규칙)에 동기화하고 baseline hash 3건을 재계산했다. Q07은 resolved다.
+- `V9__maintenance_visit.sql`: ERD대로 `maintenance_visit`을 만들고 세 user FK와 request FK 모두
+  ON DELETE RESTRICT, status/entry_policy_snapshot CHECK, `scheduled_start < scheduled_end` CHECK,
+  actual 쌍의 순서 CHECK, 그리고 actual timestamp가 `COMPLETED`일 때만 존재하도록 하는 CHECK를
+  두었다. 마지막 제약이 `NO_ACCESS`/`CANCELED`가 소요 시간을 주장하지 못하게 막는다. 열린 visit
+  하나를 보장하는 partial unique index `ux_visit_open_request`와 목록용
+  `(request_id, scheduled_start DESC)`, worker용 index를 추가했다. V6/V7/V8은 수정하지 않고
+  `ck_request_history_event_type`만 교체해 16개 event type을 허용한다.
+- Domain: `MaintenanceVisit`은 생성 시 consent snapshot을 받고 그 두 필드를 `updatable = false`로
+  두어 코드에서도 immutable하게 고정한다. `reschedule`은 구간이 실제로 움직였는지를 반환해 호출자가
+  audit 행을 남길지 결정하게 한다. `complete`/`recordNoAccess`/`cancel`은 모두 `SCHEDULED`에서만
+  동작하고 결과는 terminal이다. `VisitStatus` enum을 추가했다.
+- Application: `MaintenanceVisitService`가 scheduling, patch, 세 outcome command, 목록을 제공한다.
+  `requireManageAuthority`는 인가만 하고, 새 visit의 worker 해석은 `resolveVisitWorker`로 분리해
+  scheduling만 active assignment를 요구한다. 목록 가시성은 request read 가시성을 재사용한다.
+- API: 경로 6개를 추가하고 `SecurityConfiguration`에 등록했다. `anyRequest().denyAll()`이므로
+  GET/PATCH/POST를 각각 명시해야 한다. 예외 핸들러에 `VISIT_NOT_FOUND`와
+  `400 INVALID_VISIT_TIME` 매핑을 추가했다.
+- **역할별 projection을 구조적으로 안전하게 만들었다.** ADR-023이 "나중에 누군가 staff DTO를
+  재사용해 resident 경로가 `note`를 얻으면 안 된다"고 적은 지점이다. `VisitResponse`에 범용
+  `from()`을 두지 않고 `forStaff`와 `forResident`만 두어 호출자가 반드시 선택하게 했고,
+  `@JsonInclude(NON_NULL)`로 resident 응답에서는 `note` 키 자체가 사라진다. `VisitProjectionTest`가
+  직렬화 결과에 `note` 키가 없음을 확인하고, 범용 `from()`이 존재하지 않는다는 것까지 reflection으로
+  검증한다.
+- PATCH의 note 의미는 단순화했다. 제공된 note가 교체하고 생략하면 유지한다. 처음에는 "생략 vs 명시적
+  null"을 구분하려고 servlet filter를 참조했는데, ADR에 없는 의미를 발명한 것이고 존재하지 않는
+  클래스였으므로 되돌렸다. V1에는 note를 지우는 경로가 없고 계약도 요구하지 않는다.
+
+### 통합 테스트가 잡은 2건
+
+- 첫 실행은 20 tests / 3 failures였다.
+- (1) 2건은 `HttpComponentsClientHttpRequestFactory`가 test classpath에 없어
+  `NoClassDefFoundError`였다. 새 의존성을 추가하지 않고 Spring 내장 `JdkClientHttpRequestFactory`로
+  교체했다. 기본 simple factory는 PATCH를 보내지 못한다.
+- (2) 1건은 **실제 구현 버그**였다. 닫힌 request의 `cancel`이 200이 아니라 409를 반환했다.
+  `requireManageAuthority`가 인가와 "새 visit의 worker 해석"을 한 메서드에서 처리하면서 active
+  assignment를 항상 요구했는데, ADR-022에 따라 close가 assignment를 종료하므로 닫힌 request에는
+  active assignment가 없다. 그래서 ADR-023이 "`cancel`은 항상 가능해 닫힌 request에 남은 열린
+  visit을 정리한다"고 정한 경로가 막혔다. 두 책임을 분리해 scheduling만 assignment를 요구하도록
+  고쳤다. 계약, 마이그레이션, 에러 매핑은 바꾸지 않았다.
+
+### 검증 결과
+
+- 요청 순서대로 전부 통과했다: `gradlew --stop`(No Gradle daemons are running) →
+  `python scripts/check_repository.py` → `git diff --check`(기존 LF/CRLF 경고만) →
+  `check bootJar --no-daemon --console=plain` → `integrationTest --no-daemon --console=plain`.
+- 최종 integrationTest 집계: **19 suites, 103 tests, 0 failures, 0 errors, 0 skipped.** Visit 신규
+  기여는 20이다. 단위 `check`는 Checkstyle 3종과 ArchUnit 포함 통과했다.
+- 캐시나 빌드 산출물을 삭제하지 않았고 commit, push, reset, checkout을 수행하지 않았다.
+
+### 남은 작업과 주의사항
+
+- 커밋되지 않은 변경이 `feature/maintenance-visit`에 남아 있다. 커밋·push·PR은 요청 시에만 한다.
+- Phase 3 남은 범위: work log, attachment, comment, 신고 metadata PATCH. `WorkLog.visit_id`는 이제
+  가리킬 테이블이 있다. Attachment는 S3 presigned(ADR-008/010)가 얽혀 가장 무겁다.
+- Visit의 `worker_id`는 scheduling 시점의 active assignee다. 이후 재배정되면 `worker_id`가 former
+  assignee인 visit이 남고 command 권한은 새 assignee로 간다. 의도된 이력이며 ADR-023에 기록했다.
+- RequestHistory event type을 늘리는 슬라이스는 `ck_request_history_event_type`을 또 교체해야 한다.
+  V7, V8, V9가 선례다.
+- 열린 PR: #9(setup-java, dependabot 리베이스 대기), #16(Gradle 9.8.2, `check_repository.py`의
+  wrapper 해시 2건 갱신이 필요한 전용 작업). #11과 #17은 근거를 코멘트로 남기고 닫았다.
+- 전체 코드리뷰는 Phase 3 완료 후 인증 슬라이스부터 하나씩 수행한다. 생성 슬라이스 deferred 지적
+  1·2·3·5·6·8번이 그대로 남아 있다.
+
+## 2026-11-06 - ADR 전수 한국어화, Visit 계약 제안
+
+- 베이스 정리: PR #18 병합 후 로컬 `main`을 `origin/main`으로 fast-forward하고
+  `feature/maintenance-visit`를 생성했다. PR #2/#3/#4/#8/#13도 병합되어 Actions 버전과
+  ArchUnit 1.5.1이 반영된 상태다.
+- Proposed `ADR-023`(MaintenanceVisit 계약)을 작성하고 `open-questions.md`에 Q07로 등록했다.
+  Frozen이 테이블 컬럼, `VisitStatus` 4개, 생성 가능한 request 상태, consent snapshot immutability,
+  visit 완료가 request resolve가 아니라는 점, 여섯 경로, `INVALID_VISIT_TIME`/`VISIT_NOT_FOUND`를
+  이미 정해두었고, ERD는 history event 예시가 완전한 enum이 아니라고 명시해 두었다. ADR-023은
+  `worker_id`의 서버 유도, request당 열린 visit 하나와 partial unique index, PATCH 허용 필드,
+  actual timestamp를 client가 제공하는 이유, terminal request에서 `cancel`만 허용, 과거 시각 허용,
+  RESIDENT의 `note` 제외, version 미검사, 5개 event type과 V9를 제안한다.
+- **사용자 결정: ADR 문서를 전수 한국어화한다.** Frozen 계약 문서 `api-spec-v1.md`와 `erd-v1.md`는
+  영어를 유지한다. 두 파일은 DTO 시그니처·endpoint·error code 나열이 대부분이고 baseline hash
+  churn을 피하기 위해서다.
+- ADR-001~023 23개를 한국어로 다시 썼다. 한글 비율 22~41%로, 한국어 중심 문서인
+  `open-questions.md`(24%)와 비슷하거나 높다. 보존한 것: 파일명, `Status:` 줄의 통제 어휘
+  (Selected/Accepted/Proposed와 그 수식어), `Date:`, 구조 H2(`## Context`, `## Decision`,
+  `## Alternatives`, `## Consequences`, `## Contract synchronization`), ADR-001~013의 이중 언어
+  헤딩(`## Context / 배경`), 모든 코드 식별자·경로·상태값·컬럼명·SQL·URL. 번역한 것: 산문, H3
+  하위 헤딩, H1 제목.
+- 번역 검증: git HEAD와 비교해 23개 파일의 헤딩 구조, 표 행 수, backtick 코드 식별자 집합을
+  대조했다. 공백 정규화 후 **식별자 유실 0건**이다. 처음 플래그된 4건은 원문에서 backtick span이
+  줄바꿈으로 쪼개져 있던 artifact였다. 헤딩 차이는 의도한 H3·제목 번역뿐이다.
+  `python scripts/check_repository.py`가 통과해 문서 간 링크도 전부 유효하다.
+- 변경 파일: `docs/adr/ADR-001`~`ADR-023` 23개, `docs/adr/README.md`,
+  `docs/architecture/open-questions.md`, `WORKLOG.md`
+- 검증: `python scripts/check_repository.py` 통과. 문서 전용 변경이라 Gradle 검증은 실행하지 않았다.
+  commit, push는 수행하지 않았다.
+- 다음: ADR-023 승인 또는 수정. 특히 종료 전이와 배정 처리, RESIDENT의 `note` 가시성을 확정해야
+  한다. 승인 후 Frozen 동기화와 V9 + visit 슬라이스 구현을 진행한다. 이후 작성하는 모든 ADR은
+  한국어로 쓴다.
+
 ## 2026-11-04 - 신고생성 슬라이스 리뷰 결과 기록, Phase 3 조회 작업 착수
 
 - 브랜치 정리: 로컬 `main`을 `origin/main`(`cd2f4b4`, PR #14 병합)으로 fast-forward하고

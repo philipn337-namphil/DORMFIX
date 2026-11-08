@@ -195,6 +195,61 @@ and timestamp writes, and exactly one RequestHistory row. The eight commands app
 `REQUEST_REOPENED`, `REQUEST_REJECTED` and `REQUEST_MARKED_DUPLICATE`, and the duplicate row carries
 `{"duplicateOfId": <id>}` in `metadata`.
 
+### Maintenance visits
+
+`POST /maintenance-requests/{id}/visits` takes `ScheduleVisitRequest(scheduledStart, scheduledEnd,
+note?)`. It never accepts `workerId`, `status`, either actual timestamp, `entryPolicySnapshot` or
+`contactBeforeEntry`. `worker_id` is the request's current active assignee, resolved by the server,
+and `created_by_id` is the JWT subject, so an administrator who schedules a visit is recorded as its
+creator while the assigned worker remains the person who performs it.
+
+Scheduling requires an active assignment and a request in `ASSIGNED`, `IN_PROGRESS` or `ON_HOLD`;
+otherwise `409 INVALID_REQUEST_STATE`. Both scheduled timestamps are required with
+`scheduledStart < scheduledEnd`, otherwise `400 INVALID_VISIT_TIME`. A window in the past is
+accepted, because a worker may record a visit that already happened. Creation snapshots
+`entry_policy_snapshot` and `contact_before_entry` from the request, sets `status=SCHEDULED`, and
+leaves both actual timestamps null.
+
+A request has at most one `SCHEDULED` visit, reinforced by a partial unique index on `request_id`
+where the status is `SCHEDULED`. A second scheduling attempt while one is open is
+`409 INVALID_REQUEST_STATE`.
+
+`PATCH /visits/{visitId}` takes `UpdateVisitRequest(scheduledStart?, scheduledEnd?, note?)` and
+rejects unknown fields. It can never change `status`, `workerId`, `requestId`, either actual
+timestamp, `entryPolicySnapshot` or `contactBeforeEntry`. Only a `SCHEDULED` visit may be patched,
+otherwise `409 INVALID_REQUEST_STATE`. The two scheduled timestamps are supplied together or not at
+all and must satisfy `scheduledStart < scheduledEnd`, otherwise `400 INVALID_VISIT_TIME`. A patch
+that changes the window appends `VISIT_RESCHEDULED`; a note-only patch appends nothing.
+
+`SCHEDULED` is the only source state for the three outcome commands and each outcome is terminal
+for the visit. None of them changes the request status, because completing a visit is not resolving
+the request. `POST /visits/{visitId}/complete` takes
+`CompleteVisitRequest(actualStartedAt, actualEndedAt, note?)`, requires both timestamps with
+`actualStartedAt < actualEndedAt`, and writes them with `status=COMPLETED`; the server does not
+invent them because it cannot know when the worker arrived or left.
+`POST /visits/{visitId}/no-access` and `POST /visits/{visitId}/cancel` take
+`VisitOutcomeRequest(note)` with `note` required, write no actual timestamps, and set `NO_ACCESS`
+or `CANCELED`. `complete` and `no-access` require the request not to be terminal, otherwise
+`409 INVALID_REQUEST_STATE`; `cancel` is always available on a `SCHEDULED` visit, which is how a
+visit left open when its request was closed is cleared.
+
+Scheduling, patching and all three outcome commands are performed by the request's current active
+assignee or by a scoped `ADMIN`/`SUPER_ADMIN`. A caller holding `WORKER` who is not the current
+assignee receives `403 WORKER_NOT_ASSIGNED`; a caller whose role cannot use the command receives
+`403 ACCESS_DENIED`. Authorization is evaluated before the state checks. A missing visit is
+`404 VISIT_NOT_FOUND`.
+
+`GET /maintenance-requests/{id}/visits` reuses the request read visibility, so a request outside
+visibility answers `404 REQUEST_NOT_FOUND` exactly as the detail read does. A `RESIDENT` does not
+receive `note`, which is free-text staff content written at completion, cancellation or no-access;
+everything else, including the consent snapshot that is the resident's own, is visible to them. The
+list is ordered `scheduledStart DESC, id DESC` and is not paginated.
+
+Visit commands are not version-checked in V1: `MaintenanceVisit` has no `version` column, and the
+`SCHEDULED`-only precondition with the open-visit index makes a lost update answer `409`. The five
+audit events are `VISIT_SCHEDULED`, `VISIT_RESCHEDULED`, `VISIT_COMPLETED`, `VISIT_CANCELED` and
+`VISIT_NO_ACCESS`, each carrying `{"visitId": <id>}` in `metadata`.
+
 ### Structure administration
 
 All structure-management paths use the `/admin` prefix. These endpoints are part of the frozen contract but are not implemented yet.
