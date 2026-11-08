@@ -1,4 +1,4 @@
-# ADR-015: Dormitory structure management authorization
+# ADR-015: Dormitory 구조 관리 authorization
 
 Status: Accepted - V1 authoritative decision
 
@@ -6,22 +6,22 @@ Date: 2026-09-18
 
 ## Context
 
-The frozen permission matrix and API inventory identified structure management roles but left the operation-level policy and MaintenanceCategory ownership ambiguous. The prior documents also did not define parent deactivation propagation or deletion behavior.
+Frozen permission matrix와 API inventory는 구조 관리 role을 식별했지만 operation 수준의 정책과 MaintenanceCategory 소유권을 모호하게 남겼다. 이전 문서들도 상위 비활성화의 전파와 삭제 동작을 정의하지 않았다.
 
 ## Decision
 
-- `SUPER_ADMIN` alone may create, update, or deactivate Dormitory, Building, and Space.
-- `ADMIN` may create, update, or deactivate Facility only within an explicitly assigned Dormitory scope. `SUPER_ADMIN` may manage Facility globally.
-- MaintenanceCategory is V1 global Master Data. Its creation, update, and deactivation are `SUPER_ADMIN`-only.
-- Deactivating a parent does not automatically deactivate children.
-- Creating or reactivating a child below an inactive parent is denied.
-- Operational data is never hard-deleted.
-- The accepted Admin API contract, including paths, DTOs and Facility status commands, is recorded in [ADR-016](ADR-016-admin-structure-api-contract.md).
+- Dormitory, Building, Space의 생성·수정·비활성화는 `SUPER_ADMIN`만 수행할 수 있다.
+- `ADMIN`은 명시적으로 할당된 Dormitory scope 안에서만 Facility를 생성·수정·비활성화할 수 있다. `SUPER_ADMIN`은 Facility를 전역으로 관리할 수 있다.
+- MaintenanceCategory는 V1 전역 Master Data다. 생성·수정·비활성화는 `SUPER_ADMIN` 전용이다.
+- 상위를 비활성화해도 하위가 자동으로 비활성화되지 않는다.
+- 비활성 상위 아래에서 하위를 생성하거나 재활성화하는 것은 거부한다.
+- 운영 데이터는 절대 hard-delete하지 않는다.
+- 경로, DTO, Facility status command를 포함한 승인된 Admin API 계약은 [ADR-016](ADR-016-admin-structure-api-contract.md)에 기록한다.
 
 ## Alternatives
 
-Allowing ADMIN to manage global MaintenanceCategory would conflict with its global master-data role and would not have a Dormitory FK for scope enforcement. Cascading deactivation would create implicit state changes across aggregates. Neither alternative is selected.
+ADMIN이 전역 MaintenanceCategory를 관리하게 하면 전역 master-data라는 역할과 충돌하고, scope를 강제할 Dormitory FK도 없다. 비활성화를 cascade하면 aggregate를 넘어 암묵적인 상태 변경이 생긴다. 두 대안 모두 선택하지 않는다.
 
 ## Consequences
 
-The permission matrix, API inventory, security guidance, and open-question register now share one V1 policy. Application authorization must enforce these rules before management APIs are implemented; no Java or database schema change is implied by this ADR.
+Permission matrix, API inventory, security guidance, open-question register가 이제 하나의 V1 정책을 공유한다. 관리 API를 구현하기 전에 Application authorization이 이 규칙들을 강제해야 한다. 이 ADR은 Java나 database schema 변경을 함의하지 않는다.
