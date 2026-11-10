@@ -6,7 +6,11 @@ import com.dormfix.location.application.BuildingNotFoundException;
 import com.dormfix.location.application.DormitoryNotFoundException;
 import com.dormfix.location.application.FacilityNotFoundException;
 import com.dormfix.location.application.SpaceNotFoundException;
+import com.dormfix.maintenance.application.AttachmentNotFoundException;
+import com.dormfix.maintenance.application.AttachmentStorageUnavailableException;
 import com.dormfix.maintenance.application.CommentNotFoundException;
+import com.dormfix.maintenance.application.FileTooLargeException;
+import com.dormfix.maintenance.application.InvalidFileTypeException;
 import com.dormfix.maintenance.application.InvalidEntryPolicyException;
 import com.dormfix.maintenance.application.InvalidMaintenanceQueryException;
 import com.dormfix.maintenance.application.InvalidPreferredVisitTimeException;
@@ -41,7 +45,8 @@ public class MaintenanceRequestExceptionHandler {
             DormitoryNotFoundException.class, FacilityNotFoundException.class,
             MaintenanceCategoryNotFoundException.class, UserNotFoundException.class,
             MaintenanceRequestNotFoundException.class, WorkerNotFoundException.class,
-            VisitNotFoundException.class, CommentNotFoundException.class})
+            VisitNotFoundException.class, CommentNotFoundException.class,
+            AttachmentNotFoundException.class})
     ResponseEntity<ApiError> notFound(RuntimeException error, HttpServletRequest request) {
         return response(request, HttpStatus.NOT_FOUND, code(error), "Resource was not found.", List.of());
     }
@@ -125,6 +130,28 @@ public class MaintenanceRequestExceptionHandler {
                 List.of());
     }
 
+    @ExceptionHandler(InvalidFileTypeException.class)
+    ResponseEntity<ApiError> invalidFileType(HttpServletRequest request) {
+        return response(request, HttpStatus.BAD_REQUEST, "INVALID_FILE_TYPE",
+                "The file type is not allowed.", List.of());
+    }
+
+    @ExceptionHandler(FileTooLargeException.class)
+    ResponseEntity<ApiError> fileTooLarge(HttpServletRequest request) {
+        return response(request, HttpStatus.BAD_REQUEST, "FILE_TOO_LARGE",
+                "The file size is not allowed.", List.of());
+    }
+
+    /**
+     * Object storage is not connected. This keeps the standard error body; it is not one of the
+     * frozen 4xx meanings because the request itself was acceptable.
+     */
+    @ExceptionHandler(AttachmentStorageUnavailableException.class)
+    ResponseEntity<ApiError> storageUnavailable(HttpServletRequest request) {
+        return response(request, HttpStatus.SERVICE_UNAVAILABLE, "STORAGE_UNAVAILABLE",
+                "Attachment storage is not available.", List.of());
+    }
+
     @ExceptionHandler(InvalidVisitTimeException.class)
     ResponseEntity<ApiError> invalidVisitTime(InvalidVisitTimeException error,
             HttpServletRequest request) {
@@ -185,6 +212,9 @@ public class MaintenanceRequestExceptionHandler {
         }
         if (error instanceof CommentNotFoundException) {
             return "COMMENT_NOT_FOUND";
+        }
+        if (error instanceof AttachmentNotFoundException) {
+            return "ATTACHMENT_NOT_FOUND";
         }
         // No guessed default: an unmapped type must not silently answer with another frozen code.
         throw new IllegalStateException("Unmapped not-found exception: " + error.getClass());

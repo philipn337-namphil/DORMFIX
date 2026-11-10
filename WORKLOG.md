@@ -1,5 +1,89 @@
 # DormFix 작업 로그
 
+## 2026-11-10 - Attachment 슬라이스 구현, Phase 3 계약 표면 완성
+
+- 브랜치: `feature/maintenance-attachment`를 `feature/maintenance-comment` 위에 스택했다. V13이 V12
+  뒤여야 하고 controller와 security 설정을 PR #22와 같은 자리에서 건드리기 때문이다.
+- 조사에서 범위 근거를 찾았다. `docs/development/roadmap.md`가 이 슬라이스에 대해 "attachment
+  metadata, S3 abstraction, presigned URL contract를 구현한다. 실제 S3 연결은 뒤로 미룬다"고 이미
+  적어 두었다. ADR-008의 "foundation 단계에서 AWS 구현을 추가하지 않는다", AGENTS.md의 실제 cloud
+  provisioning 금지와 일치한다.
+- 사용자 승인으로 `ADR-027`을 Accepted로 전환했다. 승인 시 두 가지를 직접 선택받았다. Storage는
+  port 뒤에 두고 실제 S3 adapter 없이 닫힌 채로 실패하게 하며, request를 읽을 수 있는 resident는
+  모든 attachment를 본다. Frozen API specification, permission matrix, ERD에 동기화하고 baseline
+  hash 3건을 재계산했다. Q11은 resolved다.
+- `V13__attachment.sql`: ERD대로 `attachment`를 만들고 `type` CHECK, `object_key` unique,
+  `file_size > 0` CHECK, 두 FK ON DELETE RESTRICT, `(request_id, created_at)` index를 두었다.
+  RequestHistory를 남기지 않으므로 `ck_request_history_event_type`은 건드리지 않았다.
+- Domain: `Attachment`는 모든 column이 `updatable = false`이고 mutator가 없다. `AttachmentType`
+  enum을 추가했다.
+- Application: `AttachmentStorage` port(upload presign, 저장된 object 조회, download presign),
+  `AttachmentPolicy`(설정 기반 한도), `AttachmentObjectKeys`(key 생성과 접두 검증),
+  `AttachmentAccess`(database 단계, 각각 짧은 transaction), `AttachmentService`(비-transactional
+  orchestration)를 추가했다. `AttachmentService`가 transaction과 storage 호출을 번갈아 수행하므로
+  **어떤 storage 호출도 transaction 안에서 일어나지 않는다.**
+- Infrastructure: `UnavailableAttachmentStorage`가 기본 adapter이며 모든 호출에 실패한다.
+  `AttachmentProperties`가 `dormfix.attachments.*` 설정을 기본값과 함께 바인딩한다. 기본값은 10 MiB,
+  jpeg/png/webp/pdf, request당 20개, upload URL 10분, download URL 5분이다. `application.yml`은
+  수정하지 않았다.
+- API: 경로 넷을 추가하고 `SecurityConfiguration`에 등록했다. 예외 핸들러에
+  `ATTACHMENT_NOT_FOUND`, `INVALID_FILE_TYPE`, `FILE_TOO_LARGE`, 그리고 새 status와 code인
+  `503 STORAGE_UNAVAILABLE` 매핑을 추가했다. 응답 DTO에는 `objectKey` field가 없다.
+- `SecurityBoundaryTest`: maintenance request 경로가 전부 구현되었으므로 "미구현 경로" 단언을 아직
+  미구현인 frozen notification 경로로 옮겼다. 단언을 약화시킨 것이 아니라 전제가 바뀐 것을 따라간
+  것이다.
+
+### 이 슬라이스의 핵심 설계 판단
+
+- **닫힌 채로 실패한다.** 연결 전에 "성공한 척하는" stub을 기본으로 두지 않았다. Object 존재 확인이
+  항상 통과하면 존재하지 않는 파일의 metadata를 누구나 등록할 수 있고, 그 adapter가 배포에 남으면
+  검증이 통째로 사라진다. Fake는 `integrationTest` source set에만 있다.
+- **Key 접두가 pending upload table을 대신한다.** `requests/{requestId}/attachments/{uploaderId}/{uuid}`
+  형식이므로 등록 시 접두만으로 "이 key가 이 caller가 이 request를 위해 받은 것인가"를 상태 없이
+  확인한다. `AttachmentObjectKeysTest`가 다른 request, 다른 uploader, id가 접두만 겹치는 경우
+  (1 대 12), traversal, 추가 segment, 대문자 UUID, 개행을 모두 거부함을 확인한다.
+- **등록은 storage가 본 값을 기록한다.** 등록 DTO는 content type과 크기를 받지 않는다. 통합 테스트가
+  "1000 byte PNG로 presign하고 2048 byte JPEG를 올린" 경우 기록이 JPEG/2048이 됨을, 그리고 허용 밖
+  type이나 한도 초과를 올리면 presign을 통과했어도 등록에서 `INVALID_FILE_TYPE`/`FILE_TOO_LARGE`로
+  걸림을 확인한다.
+- **인가와 검증이 storage보다 먼저다.** `AttachmentStorageUnavailableIntegrationTest`가 fake 없이
+  실제 출하 상태를 검증한다. 인가된 presign은 표준 error 본문의 `503`을, 가시성 밖 caller는
+  `404`를, 허용 밖 type은 `400`을, 위조 key는 `403`을 storage에 닿기 전에 받는다. 목록은 storage를
+  쓰지 않으므로 `200`이다.
+
+### 검증 결과
+
+- 요청 순서대로 전부 통과했다: `gradlew --stop`(No Gradle daemons are running) →
+  `python scripts/check_repository.py` → `git diff --check`(기존 LF/CRLF 경고만) →
+  `check bootJar --no-daemon --console=plain` → `integrationTest --no-daemon --console=plain`.
+- 최종 integrationTest 집계: **24 suites, 166 tests, 0 failures, 0 errors, 0 skipped.** Attachment
+  신규 기여는 19(본체 15, storage 미연결 4)다. 통합 테스트 첫 실행에서 실패가 없었다.
+- 캐시나 빌드 산출물을 삭제하지 않았다. 위 게이트는 `caabf24`(comment 브랜치 tip) 위의 작업 트리에서
+  실행했다. 이후 PR #22가 merge commit `afaaedb`로 병합되어 브랜치를 그 위로 fast-forward했는데,
+  `git diff caabf24 afaaedb`가 비어 있으므로 검증한 tree와 같다.
+
+### 남은 작업과 주의사항
+
+- PR #22(comment)가 병합된 뒤 사용자 요청으로 이 슬라이스를 커밋하고 push해 `main` 대상 PR을
+  올렸다. PR 번호와 병합 여부는 GitHub에서 확인한다.
+- **실행 중인 application에서 attachment의 presign, 등록, download-url은 `503`이다.** 실제 S3
+  adapter(`S3Presigner`, `HeadObject`)와 고아 object 정리 lifecycle 작업은 별도 슬라이스다. Port가
+  그 경계이므로 adapter는 계약 변경 없이 들어온다.
+- Storage가 보고한 content type은 upload 시 client가 붙인 header에서 온다. Magic byte 검사와
+  악성코드 검사는 V1 범위 밖이며 ADR-027 Consequences에 기록했다.
+- Request당 개수 한도는 등록 transaction에서 다시 확인하지만 동시 등록 둘이 한도를 한 개 넘길 수
+  있다. 한도는 보호 장치이지 불변식이 아니므로 잠금을 두지 않았다.
+- 등록된 attachment를 삭제하는 경로가 없다. 잘못 올린 파일을 내릴 방법이 V1에 없다.
+- `PROJECT_CONTEXT.md`의 "현재 상태"를 실제에 맞게 다시 썼고 Phase 3 결정 요약 절을 추가했다.
+  이전 내용은 브랜치와 구현 상태가 실제와 달랐다.
+- Phase 3 이후 남은 frozen 범위: notification 경로와 domain event side effect, 실제 S3 adapter,
+  배포. 다음 제품 기능은 사용자 요청 없이는 구현하지 않는다.
+- 다음 예정 작업은 사용자 결정대로 **전체 코드리뷰**다. 인증 슬라이스부터 하나씩 진행한다. 리뷰 때
+  함께 다룰 항목: 신고 생성 슬라이스 deferred 지적 1·2·3·5·6·8번, 생성 DTO와 PATCH의
+  `description` 상한 불일치, `RequestRelationshipResolver`로 관계 판단 모으기, Visit 목록의 페이징
+  부재.
+- 이 슬라이스 외에 열린 PR: #9(setup-java, dependabot 리베이스 대기), #16(Gradle 9.8.2 전용 작업).
+
 ## 2026-11-10 - Comment 슬라이스 구현
 
 - 브랜치: `feature/maintenance-comment`를 `feature/maintenance-request-patch` 위에 스택했다. V12가

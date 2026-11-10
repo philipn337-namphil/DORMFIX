@@ -10,10 +10,13 @@ import com.dormfix.maintenance.application.MaintenanceRequestPatchService;
 import com.dormfix.maintenance.application.MaintenanceRequestQuery;
 import com.dormfix.maintenance.application.MaintenanceRequestQueryService;
 import com.dormfix.maintenance.application.MaintenanceVisitService;
+import com.dormfix.maintenance.application.PresignUploadCommand;
+import com.dormfix.maintenance.application.RegisterAttachmentCommand;
 import com.dormfix.maintenance.application.ScheduleVisitCommand;
 import com.dormfix.maintenance.application.UpdateVisitCommand;
 import com.dormfix.maintenance.application.AddCommentCommand;
 import com.dormfix.maintenance.application.AppendWorkLogCommand;
+import com.dormfix.maintenance.application.AttachmentService;
 import com.dormfix.maintenance.application.CommentService;
 import com.dormfix.maintenance.application.VisitOutcomeCommand;
 import com.dormfix.maintenance.application.WorkLogService;
@@ -41,6 +44,7 @@ public class MaintenanceRequestController {
     private static final String BASE = "/api/v1/maintenance-requests";
     private static final String VISITS = "/api/v1/visits";
     private static final String COMMENTS = "/api/v1/comments";
+    private static final String ATTACHMENTS = "/api/v1/attachments";
 
     private final MaintenanceRequestCreationService creation;
     private final MaintenanceRequestQueryService queries;
@@ -50,13 +54,14 @@ public class MaintenanceRequestController {
     private final WorkLogService workLogs;
     private final MaintenanceRequestPatchService patches;
     private final CommentService comments;
+    private final AttachmentService attachments;
 
     public MaintenanceRequestController(MaintenanceRequestCreationService creation,
             MaintenanceRequestQueryService queries,
             MaintenanceRequestAssignmentService assignments,
             MaintenanceRequestLifecycleService lifecycle, MaintenanceVisitService visits,
             WorkLogService workLogs, MaintenanceRequestPatchService patches,
-            CommentService comments) {
+            CommentService comments, AttachmentService attachments) {
         this.creation = creation;
         this.queries = queries;
         this.assignments = assignments;
@@ -65,6 +70,7 @@ public class MaintenanceRequestController {
         this.workLogs = workLogs;
         this.patches = patches;
         this.comments = comments;
+        this.attachments = attachments;
     }
 
     @PostMapping(BASE)
@@ -275,6 +281,36 @@ public class MaintenanceRequestController {
             @AuthenticationPrincipal Jwt jwt) {
         comments.delete(commentId, id(jwt), roles(jwt));
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping(BASE + "/{id}/attachments/presigned-url")
+    public PresignedUploadResponse presignAttachmentUpload(@PathVariable Long id,
+            @Valid @RequestBody PresignUploadRequest value, @AuthenticationPrincipal Jwt jwt) {
+        return PresignedUploadResponse.from(attachments.presignUpload(
+                new PresignUploadCommand(id, value.type(), value.originalFilename(),
+                        value.contentType(), value.fileSize()),
+                id(jwt), roles(jwt)));
+    }
+
+    @PostMapping(BASE + "/{id}/attachments")
+    public AttachmentResponse registerAttachment(@PathVariable Long id,
+            @Valid @RequestBody RegisterAttachmentRequest value,
+            @AuthenticationPrincipal Jwt jwt) {
+        return AttachmentResponse.from(attachments.register(new RegisterAttachmentCommand(id,
+                value.objectKey(), value.type(), value.originalFilename()), id(jwt), roles(jwt)));
+    }
+
+    @GetMapping(BASE + "/{id}/attachments")
+    public AttachmentListResponse listAttachments(@PathVariable Long id,
+            @AuthenticationPrincipal Jwt jwt) {
+        return AttachmentListResponse.from(attachments.list(id, id(jwt), roles(jwt)));
+    }
+
+    @GetMapping(ATTACHMENTS + "/{attachmentId}/download-url")
+    public DownloadUrlResponse attachmentDownloadUrl(@PathVariable Long attachmentId,
+            @AuthenticationPrincipal Jwt jwt) {
+        return DownloadUrlResponse
+                .from(attachments.downloadUrl(attachmentId, id(jwt), roles(jwt)));
     }
 
     private LifecycleCommand command(Long id, LifecycleCommandRequest value) {
