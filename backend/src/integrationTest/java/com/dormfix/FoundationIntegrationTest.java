@@ -59,7 +59,7 @@ class FoundationIntegrationTest {
     @Test
     void migrationIsValidAndRepeatableStartupHasNoPendingMigration() {
         flyway.validate();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("9");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("10");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
     }
