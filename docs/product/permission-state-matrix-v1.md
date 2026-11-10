@@ -24,6 +24,33 @@ CLOSED, REJECTED, DUPLICATE는 terminal이다. 다른 transition은 허용하지
 - ADMIN: dormitory scope의 전체 request 조회, active request의 허용된 category/priority/location 조정, assign/reassign, REPORTED reject/duplicate, visit 관리, RESOLVED close/reopen, scope 내 Facility 관리와 Facility status command 수행. Resident entry consent를 대신 변경하지 않으며 MaintenanceCategory를 관리하지 않는다.
 - SUPER_ADMIN: ADMIN 기능과 전체 Dormitory/Building/Space/Facility, user-role 및 전역 system/master-data 관리를 가진다. MaintenanceCategory는 V1 전역 Master Data이므로 SUPER_ADMIN 전용이다. 모든 domain state rule은 동일하게 적용된다.
 
+## Attachment 세부
+
+- Storage는 `AttachmentStorage` port 뒤에 있다. 실제 S3 adapter가 연결되기 전에는 기본 adapter가 닫힌
+  채로 실패하고 attachment 경로는 `503 STORAGE_UNAVAILABLE`을 답한다. Storage 호출은 어떤 database
+  transaction 안에서도 일어나지 않는다.
+- Presign은 `PresignUploadRequest(type, originalFilename, contentType, fileSize)`를 받는다. Object
+  key는 서버가 `requests/{requestId}/attachments/{uploaderId}/{uuid}`로 만들고 파일명을 넣지 않는다.
+- 한도는 설정이다. 기본값은 최대 10 MiB, `image/jpeg`/`image/png`/`image/webp`/`application/pdf`,
+  request당 20개다. 허용 밖 type은 `400 INVALID_FILE_TYPE`, 한도 초과나 0 이하 크기는
+  `400 FILE_TOO_LARGE`, 개수 한도 도달은 `409 INVALID_REQUEST_STATE`다.
+- 등록은 `RegisterAttachmentRequest(objectKey, type, originalFilename)`를 받고 content type과
+  크기를 받지 않는다. 서버가 storage가 보고한 값을 기록하고 그 값으로 한도를 다시 검사한다.
+  Storage에 없는 object는 `409 INVALID_REQUEST_STATE`, key 접두가 그 request와 caller를 가리키지
+  않으면 `403 ACCESS_DENIED`, 이미 등록된 key는 `409 INVALID_REQUEST_STATE`다.
+- type별 작성 권한은 request에 대한 관계로 정한다. reporter인 `RESIDENT`는 `REPORT`와 `OTHER`,
+  current active assignee인 `WORKER`는 `BEFORE_REPAIR`/`AFTER_REPAIR`/`OTHER`, scope 안의 `ADMIN`과
+  `SUPER_ADMIN`은 `OTHER`를 쓴다. 관계에 맞지 않는 type은 `403 ACCESS_DENIED`, former assignee는
+  `403 WORKER_NOT_ASSIGNED`다.
+- Attachment는 request가 terminal이 아닌 동안 추가할 수 있다. `RESOLVED`를 포함한다. Presign과 등록
+  양쪽에서 검사한다.
+- 목록과 download는 request read 가시성을 따른다. request를 읽을 수 있는 caller는 그 request의 모든
+  attachment metadata를 본다. 응답에 `objectKey`는 없다. 읽을 수 없는 attachment의 download-url은
+  `404 ATTACHMENT_NOT_FOUND`다.
+- 등록은 request를 수정하지 않고 RequestHistory를 남기지 않는다. Attachment 삭제 경로는 없다.
+- 고아 object는 생성 24시간 후 storage lifecycle 작업이 삭제한다. Application은 V1에서 object를
+  삭제하지 않는다.
+
 ## Comment 세부
 
 - 작성은 `AddCommentRequest(content, visibility)`를 받고 `author_id`는 JWT subject다. `content`는

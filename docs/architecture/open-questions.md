@@ -4,6 +4,31 @@
 
 각 질문은 소유 feature slice에서 evidence와 함께 검토하고, 필요하면 proposed ADR로 올린다. 승인 전에는 기존 state, permission, ERD, API semantics를 유지한다.
 
+## Resolved Attachment 계약
+
+2026-11-10 human approval으로 [ADR-027](../adr/ADR-027-attachment-contract.md)의 V1 Attachment
+계약을 확정했다. Q11은 resolved 되었다. Frozen이 "limits are not yet product constants"로 남긴
+한도, ADR-008과 저장소 규칙이 요구한 명시적 고아 정리 정책, 실제 S3 연결 전의 동작이 아래로
+닫혔다.
+
+- Storage는 `AttachmentStorage` port 뒤에 둔다. 이 슬라이스는 실제 S3 adapter를 넣지 않고, 기본
+  adapter는 닫힌 채로 실패해 `503 STORAGE_UNAVAILABLE`을 답한다. `503`과 이 code는 새로 추가된다.
+- Object key는 서버가 `requests/{requestId}/attachments/{uploaderId}/{uuid}`로 만든다. 등록 시 key
+  접두가 그 request와 caller를 가리키는지 확인하므로 pending upload table이 필요 없다.
+- 한도는 설정이다. 기본값은 10 MiB, `image/jpeg`/`image/png`/`image/webp`/`application/pdf`,
+  request당 20개, upload URL 10분, download URL 5분이다.
+- 등록은 client가 보낸 값이 아니라 storage가 보고한 크기와 content type을 기록하고 그 값으로 한도를
+  다시 검사한다.
+- type별 권한: reporter resident는 `REPORT`/`OTHER`, current assignee는
+  `BEFORE_REPAIR`/`AFTER_REPAIR`/`OTHER`, scoped ADMIN/SUPER_ADMIN은 `OTHER`.
+- request가 terminal이 아닌 동안 추가할 수 있다. 목록과 download는 request read 가시성을 따르고
+  resident도 모든 attachment를 본다. 응답에 `objectKey`는 없다.
+- 고아 object는 생성 24시간 후 storage lifecycle 작업이 삭제한다. Application은 object를 삭제하지
+  않는다. Attachment 삭제 경로는 없다.
+
+전체 DTO, 권한, 한도, 가시성, 정리 정책, V13 물리 규칙은 Frozen API specification과 permission
+matrix, ERD에 동기화되어 있다. 실제 S3 adapter는 별도 슬라이스의 범위다.
+
 ## Resolved Comment 계약
 
 2026-11-10 human approval으로 [ADR-026](../adr/ADR-026-comment-contract.md)의 V1 Comment 계약을

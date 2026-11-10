@@ -365,6 +365,62 @@ already deleted one, one on a request outside visibility, and a `STAFF_ONLY` com
 resident are indistinguishable, so the path does not disclose internal remarks. A comment the
 caller can read but may not delete is `403 ACCESS_DENIED`. There is no comment update path.
 
+### Maintenance request attachments
+
+Storage sits behind an `AttachmentStorage` port that issues upload presigns, reports the actual
+size and content type of a stored object, and issues download presigns. This slice ships no real S3
+adapter. The default adapter fails closed, and the attachment paths then answer
+`503 STORAGE_UNAVAILABLE` in the standard error body, so an unconnected store is visibly absent
+rather than pretending that uploads exist. No storage call runs inside a database transaction.
+
+`POST /maintenance-requests/{id}/attachments/presigned-url` takes
+`PresignUploadRequest(type, originalFilename, contentType, fileSize)` and returns
+`PresignedUploadResponse(objectKey, uploadUrl, method, headers, expiresAt)`. The server generates
+the object key as `requests/{requestId}/attachments/{uploaderId}/{uuid}`; the file name is never
+part of the key. The presigned URL is bound to the declared content type and size.
+
+Limits are configuration, not product constants. The defaults are a maximum file size of 10 MiB,
+the content types `image/jpeg`, `image/png`, `image/webp` and `application/pdf`, at most 20
+attachments per request, an upload URL lifetime of 10 minutes and a download URL lifetime of 5
+minutes. A content type outside the allow-list is `400 INVALID_FILE_TYPE`; a size above the limit or
+not positive is `400 FILE_TOO_LARGE`; a request already at its attachment limit is
+`409 INVALID_REQUEST_STATE`. `originalFilename` is required, at most 255 characters, and may not
+contain a path separator or a control character, otherwise `400 VALIDATION_FAILED`.
+
+`POST /maintenance-requests/{id}/attachments` takes
+`RegisterAttachmentRequest(objectKey, type, originalFilename)` and never accepts a content type or a
+size. The server asks the store for the object and records the size and content type the store
+reports, then re-checks the limits against those values, so an upload that differs from its presign
+declaration is rejected at registration. An object that is not in the store is
+`409 INVALID_REQUEST_STATE`. A key whose prefix does not name this request and this caller is
+`403 ACCESS_DENIED`, which is what replaces a pending-upload table. An already registered key is
+`409 INVALID_REQUEST_STATE`. Registration does not modify the request, performs no version check,
+and writes no RequestHistory row.
+
+Write authority follows the relationship of the caller to the request. The reporter `RESIDENT` may
+add `REPORT` and `OTHER`; the current active assignee `WORKER` may add `BEFORE_REPAIR`,
+`AFTER_REPAIR` and `OTHER`; a scoped `ADMIN` and a `SUPER_ADMIN` may add `OTHER`. A type outside the
+relationship is `403 ACCESS_DENIED`, a former assignee is `403 WORKER_NOT_ASSIGNED`, and a request
+outside read visibility is `404 REQUEST_NOT_FOUND`. Attachments may be added while the request is
+not terminal, which includes `RESOLVED`; otherwise `409 INVALID_REQUEST_STATE`. Both the presign and
+the registration check this.
+
+`GET /maintenance-requests/{id}/attachments` reuses the request read visibility, and every reader
+of the request sees all of its attachment metadata. The item DTO is
+`AttachmentResponse(id, requestId, uploaderId, type, originalFilename, contentType, fileSize,
+createdAt)`; `objectKey` is never returned. The list is ordered `createdAt ASC, id ASC` and is not
+paginated, because the per-request limit bounds it.
+
+`GET /attachments/{attachmentId}/download-url` returns `DownloadUrlResponse(url, expiresAt)` when
+the caller may read the request the attachment belongs to, and otherwise answers
+`404 ATTACHMENT_NOT_FOUND` exactly as for a missing attachment. Presigned URLs are never logged.
+
+An object that was uploaded but never registered is an orphan. Unregistered objects become eligible
+for deletion 24 hours after creation, the deletion is performed by a storage-side lifecycle job
+that reconciles bucket keys against registered `object_key` values, and the application never
+deletes an object in V1. There is no attachment delete path and attachment rows are never hard
+deleted.
+
 ### Structure administration
 
 All structure-management paths use the `/admin` prefix. These endpoints are part of the frozen contract but are not implemented yet.
