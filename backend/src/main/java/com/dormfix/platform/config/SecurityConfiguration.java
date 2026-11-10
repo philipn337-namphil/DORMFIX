@@ -55,7 +55,9 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/v1/maintenance-requests/*/visits",
                                 "/api/v1/maintenance-requests/*/work-logs")
                         .authenticated()
-                        .requestMatchers(HttpMethod.PATCH, "/api/v1/visits/*").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/visits/*",
+                                "/api/v1/maintenance-requests/*")
+                        .authenticated()
                         .requestMatchers("/api/v1/admin/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/dormitories",
                                 "/api/v1/dormitories/*/buildings", "/api/v1/buildings/*/spaces",

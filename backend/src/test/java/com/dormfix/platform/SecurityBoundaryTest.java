@@ -16,6 +16,7 @@ import com.dormfix.location.application.ResidenceQueryService;
 import com.dormfix.maintenance.application.MaintenanceRequestAssignmentService;
 import com.dormfix.maintenance.application.MaintenanceRequestCreationService;
 import com.dormfix.maintenance.application.MaintenanceRequestLifecycleService;
+import com.dormfix.maintenance.application.MaintenanceRequestPatchService;
 import com.dormfix.maintenance.application.MaintenanceVisitService;
 import com.dormfix.maintenance.application.WorkLogService;
 import com.dormfix.maintenance.application.MaintenanceRequestQueryService;
@@ -73,6 +74,8 @@ class SecurityBoundaryTest {
     @MockitoBean
     private WorkLogService workLogService;
     @MockitoBean
+    private MaintenanceRequestPatchService maintenanceRequestPatchService;
+    @MockitoBean
     private JwtDecoder jwtDecoder;
     @MockitoBean
     private JwtAuthenticationConverter jwtAuthenticationConverter;
@@ -97,8 +100,8 @@ class SecurityBoundaryTest {
     /**
      * A privileged role gains no authority over a frozen path that is not implemented yet. The
      * lifecycle commands this test used to target are now implemented under ADR-022, so it points
-     * at paths that are still unimplemented: request metadata PATCH, comments
-     * and attachments. Their authorization is covered by their own slices once they exist.
+     * at the paths that are still unimplemented: comments and attachments. Their authorization is
+     * covered by their own slices once they exist.
      */
     @Test
     @WithMockUser(roles = "SUPER_ADMIN")
@@ -110,9 +113,6 @@ class SecurityBoundaryTest {
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
         }
-        mvc.perform(patch("/api/v1/maintenance-requests/1"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
 
     /**
@@ -129,6 +129,9 @@ class SecurityBoundaryTest {
                     .andExpect(result -> org.assertj.core.api.Assertions
                             .assertThat(result.getResponse().getStatus()).isNotEqualTo(403));
         }
+        mvc.perform(patch("/api/v1/maintenance-requests/1"))
+                .andExpect(result -> org.assertj.core.api.Assertions
+                        .assertThat(result.getResponse().getStatus()).isNotEqualTo(403));
     }
 
     @Test

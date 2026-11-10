@@ -4,6 +4,32 @@
 
 각 질문은 소유 feature slice에서 evidence와 함께 검토하고, 필요하면 proposed ADR로 올린다. 승인 전에는 기존 state, permission, ERD, API semantics를 유지한다.
 
+## Resolved MaintenanceRequest metadata PATCH 계약
+
+2026-11-10 human approval으로
+[ADR-025](../adr/ADR-025-maintenance-request-metadata-patch-contract.md)의 V1 metadata PATCH 계약을
+확정했다. Q09는 resolved 되었다. Frozen API specification이 "Exact patch field matrices are a
+review item"으로 지목했던 공백이 아래로 닫혔다.
+
+- Role별 field matrix는 교집합이 없다. RESIDENT는 `title`, `description`, `entryPolicy`,
+  `contactBeforeEntry`, `preferredVisitStart`/`End`를 고치고, scoped ADMIN/SUPER_ADMIN은
+  `categoryId`, `priority`, `facilityId`를 고친다.
+- 경로는 하나지만 DTO는 둘이고 caller의 role로 해석한다. 상대 집합의 field는 unknown field로
+  `400`이다. 두 role을 겸한 caller는 administrator로 해석한다.
+- RESIDENT는 `REPORTED`이고 본인이 reporter일 때만, administrator는 `REPORTED`/`ASSIGNED`/
+  `IN_PROGRESS`/`ON_HOLD`일 때만 수정한다. `RESOLVED`와 terminal은 `409`다.
+- `spaceId`는 PATCH가 받지 않는다. ADR-019의 current Residence ROOM 불변식이 생성 시점에만
+  유효해지는 것을 막기 위해서다. matrix의 "location 조정"은 `facilityId`로 해석한다.
+- `categoryId`를 바꿔도 `priority`는 새 category default로 재설정되지 않는다.
+- 생략과 명시적 null을 구분한다. nullable은 `facilityId`와 희망 시간 둘뿐이고 명시적 null로
+  해제한다. 해제가 계약상 필요한 동작이기 때문이다.
+- 변경된 field에 따라 `CATEGORY_CHANGED`, `PRIORITY_CHANGED`, `REQUEST_METADATA_UPDATED`를 남기고
+  `metadata`에는 바뀐 field 이름만 담는다. 값은 담지 않는다. V11이
+  `ck_request_history_event_type`을 교체한다.
+
+전체 field matrix, DTO, 상태 제한, 해제 의미, history event는 Frozen API specification과 permission
+matrix, ERD에 동기화되어 있다.
+
 ## Resolved WorkLog 계약
 
 2026-11-08 human approval으로 [ADR-024](../adr/ADR-024-work-log-contract.md)의 V1 WorkLog 계약을

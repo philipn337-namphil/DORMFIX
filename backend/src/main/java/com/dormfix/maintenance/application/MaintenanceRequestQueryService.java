@@ -194,13 +194,6 @@ public class MaintenanceRequestQueryService {
     }
 
     private MaintenanceRequestDetailResult detail(MaintenanceRequest request, Long assigneeId) {
-        return new MaintenanceRequestDetailResult(request.getId(), request.getRequestNumber(),
-                request.getStatus().name(), request.getPriority().name(), request.getCategoryId(),
-                request.getSpaceId(), request.getFacilityId(), request.getTitle(), assigneeId,
-                request.getCreatedAt(), request.getUpdatedAt(), request.getVersion(),
-                request.getReporterId(), request.getDescription(), request.getEntryPolicy().name(),
-                request.isContactBeforeEntry(), request.getPreferredVisitStart(),
-                request.getPreferredVisitEnd(), request.getDuplicateOfId(),
-                request.getStatusReason(), request.getResolvedAt(), request.getClosedAt());
+        return MaintenanceRequestDetailResult.of(request, assigneeId);
     }
 }
