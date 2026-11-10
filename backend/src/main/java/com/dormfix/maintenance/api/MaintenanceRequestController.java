@@ -12,7 +12,9 @@ import com.dormfix.maintenance.application.MaintenanceRequestQueryService;
 import com.dormfix.maintenance.application.MaintenanceVisitService;
 import com.dormfix.maintenance.application.ScheduleVisitCommand;
 import com.dormfix.maintenance.application.UpdateVisitCommand;
+import com.dormfix.maintenance.application.AddCommentCommand;
 import com.dormfix.maintenance.application.AppendWorkLogCommand;
+import com.dormfix.maintenance.application.CommentService;
 import com.dormfix.maintenance.application.VisitOutcomeCommand;
 import com.dormfix.maintenance.application.WorkLogService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MaintenanceRequestController {
     private static final String BASE = "/api/v1/maintenance-requests";
     private static final String VISITS = "/api/v1/visits";
+    private static final String COMMENTS = "/api/v1/comments";
 
     private final MaintenanceRequestCreationService creation;
     private final MaintenanceRequestQueryService queries;
@@ -45,12 +49,14 @@ public class MaintenanceRequestController {
     private final MaintenanceVisitService visits;
     private final WorkLogService workLogs;
     private final MaintenanceRequestPatchService patches;
+    private final CommentService comments;
 
     public MaintenanceRequestController(MaintenanceRequestCreationService creation,
             MaintenanceRequestQueryService queries,
             MaintenanceRequestAssignmentService assignments,
             MaintenanceRequestLifecycleService lifecycle, MaintenanceVisitService visits,
-            WorkLogService workLogs, MaintenanceRequestPatchService patches) {
+            WorkLogService workLogs, MaintenanceRequestPatchService patches,
+            CommentService comments) {
         this.creation = creation;
         this.queries = queries;
         this.assignments = assignments;
@@ -58,6 +64,7 @@ public class MaintenanceRequestController {
         this.visits = visits;
         this.workLogs = workLogs;
         this.patches = patches;
+        this.comments = comments;
     }
 
     @PostMapping(BASE)
@@ -245,6 +252,29 @@ public class MaintenanceRequestController {
                     MetadataPatchParser.resident(id, body), id(jwt), roles));
         }
         throw new AccessDeniedException("Access is denied.");
+    }
+
+    @PostMapping(BASE + "/{id}/comments")
+    public CommentResponse addComment(@PathVariable Long id,
+            @Valid @RequestBody AddCommentRequest value, @AuthenticationPrincipal Jwt jwt) {
+        return CommentResponse.from(comments.add(
+                new AddCommentCommand(id, value.content(), value.visibility()), id(jwt),
+                roles(jwt)));
+    }
+
+    @GetMapping(BASE + "/{id}/comments")
+    public CommentPageResponse listComments(@PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size, @AuthenticationPrincipal Jwt jwt) {
+        return CommentPageResponse
+                .from(comments.listForRequest(id, page, size, id(jwt), roles(jwt)));
+    }
+
+    @DeleteMapping(COMMENTS + "/{commentId}")
+    public ResponseEntity<Void> deleteComment(@PathVariable Long commentId,
+            @AuthenticationPrincipal Jwt jwt) {
+        comments.delete(commentId, id(jwt), roles(jwt));
+        return ResponseEntity.noContent().build();
     }
 
     private LifecycleCommand command(Long id, LifecycleCommandRequest value) {

@@ -24,6 +24,31 @@ CLOSED, REJECTED, DUPLICATE는 terminal이다. 다른 transition은 허용하지
 - ADMIN: dormitory scope의 전체 request 조회, active request의 허용된 category/priority/location 조정, assign/reassign, REPORTED reject/duplicate, visit 관리, RESOLVED close/reopen, scope 내 Facility 관리와 Facility status command 수행. Resident entry consent를 대신 변경하지 않으며 MaintenanceCategory를 관리하지 않는다.
 - SUPER_ADMIN: ADMIN 기능과 전체 Dormitory/Building/Space/Facility, user-role 및 전역 system/master-data 관리를 가진다. MaintenanceCategory는 V1 전역 Master Data이므로 SUPER_ADMIN 전용이다. 모든 domain state rule은 동일하게 적용된다.
 
+## Comment 세부
+
+- 작성은 `AddCommentRequest(content, visibility)`를 받고 `author_id`는 JWT subject다. `content`는
+  필수, 최대 2000자다. `visibility`는 필수이고 기본값이 없다.
+- 작성 권한은 role이 아니라 request에 대한 관계로 정한다. reporter인 `RESIDENT`는 `PUBLIC`만,
+  current active assignee인 `WORKER`와 scope 안의 `ADMIN`, `SUPER_ADMIN`은 `PUBLIC`과
+  `STAFF_ONLY`를 쓴다. staff 관계 없이 `STAFF_ONLY`를 보내면 `403 ACCESS_DENIED`다. former
+  assignee는 `403 WORKER_NOT_ASSIGNED`다.
+- Comment는 request가 terminal이 아닌 동안 쓸 수 있다. `RESOLVED`를 포함한다. Role별 규칙의
+  resident 항목에 있는 "active request"는 comment에 대해 이 뜻이다. `CLOSED`/`REJECTED`/
+  `DUPLICATE`는 `409 INVALID_REQUEST_STATE`다.
+- Comment 추가는 request를 수정하지 않고 version을 검사하지 않으며 RequestHistory를 남기지 않는다.
+- 읽기는 request read 가시성을 재사용한다. staff 관계(`SUPER_ADMIN`, scope 안의 `ADMIN`, 그
+  request의 assignment row를 가진 `WORKER`)를 가진 reader는 두 visibility를 모두 받는다. 그 외의
+  reader인 reporter `RESIDENT`는 `PUBLIC`만 받고, `totalElements`와 `totalPages`도 `PUBLIC`만 센다.
+- 목록은 `createdAt ASC, id ASC` 정렬이고 0-based `page`와 `1..100` `size`(default 20)로 페이징한다.
+- Soft-delete는 작성자 본인(지금도 그 request에 쓸 수 있는 관계일 때)과 scope 안의 `ADMIN`,
+  `SUPER_ADMIN`이 한다. former assignee는 자기 comment도 지울 수 없다. 삭제는 request 상태로 막지
+  않는다. 삭제된 comment는 목록과 개수에서 빠지고 row는 남는다. 삭제는 `COMMENT_DELETED`
+  RequestHistory 행을 남기며 content는 담지 않는다.
+- Caller가 읽을 수 없는 comment의 삭제는 `404 COMMENT_NOT_FOUND`다. 없는 comment, 이미 삭제된
+  comment, resident가 지목한 `STAFF_ONLY` comment가 같은 응답을 받는다. 읽을 수 있지만 지울 권한이
+  없으면 `403 ACCESS_DENIED`다.
+- Comment 수정 경로는 없다.
+
 ## MaintenanceRequest metadata PATCH field matrix
 
 | Field | RESIDENT | scoped ADMIN / SUPER_ADMIN |

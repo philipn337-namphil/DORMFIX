@@ -13,6 +13,7 @@ import com.dormfix.catalog.application.CatalogQueryService;
 import com.dormfix.catalog.application.AdminCatalogCommandService;
 import com.dormfix.location.application.ResidenceCommandService;
 import com.dormfix.location.application.ResidenceQueryService;
+import com.dormfix.maintenance.application.CommentService;
 import com.dormfix.maintenance.application.MaintenanceRequestAssignmentService;
 import com.dormfix.maintenance.application.MaintenanceRequestCreationService;
 import com.dormfix.maintenance.application.MaintenanceRequestLifecycleService;
@@ -76,6 +77,8 @@ class SecurityBoundaryTest {
     @MockitoBean
     private MaintenanceRequestPatchService maintenanceRequestPatchService;
     @MockitoBean
+    private CommentService commentService;
+    @MockitoBean
     private JwtDecoder jwtDecoder;
     @MockitoBean
     private JwtAuthenticationConverter jwtAuthenticationConverter;
@@ -100,15 +103,15 @@ class SecurityBoundaryTest {
     /**
      * A privileged role gains no authority over a frozen path that is not implemented yet. The
      * lifecycle commands this test used to target are now implemented under ADR-022, so it points
-     * at the paths that are still unimplemented: comments and attachments. Their authorization is
-     * covered by their own slices once they exist.
+     * at the paths that are still unimplemented: attachments. Their authorization is covered by
+     * their own slice once it exists.
      */
     @Test
     @WithMockUser(roles = "SUPER_ADMIN")
     void skeletonNeverPretendsBusinessAuthorizationIsImplemented() throws Exception {
         for (String unimplemented : java.util.List.of(
-                "/api/v1/maintenance-requests/1/comments",
-                "/api/v1/maintenance-requests/1/attachments")) {
+                "/api/v1/maintenance-requests/1/attachments",
+                "/api/v1/maintenance-requests/1/attachments/presigned-url")) {
             mvc.perform(post(unimplemented))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
@@ -124,7 +127,8 @@ class SecurityBoundaryTest {
     @WithMockUser(roles = "SUPER_ADMIN")
     void implementedLifecyclePathsAreNoLongerBlockedByTheDenyAllDefault() throws Exception {
         for (String command : java.util.List.of("start", "hold", "resume", "resolve", "close",
-                "reopen", "reject", "mark-duplicate", "assignments", "visits", "work-logs")) {
+                "reopen", "reject", "mark-duplicate", "assignments", "visits", "work-logs",
+                "comments")) {
             mvc.perform(post("/api/v1/maintenance-requests/1/" + command))
                     .andExpect(result -> org.assertj.core.api.Assertions
                             .assertThat(result.getResponse().getStatus()).isNotEqualTo(403));

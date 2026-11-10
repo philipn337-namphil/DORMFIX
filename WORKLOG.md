@@ -1,5 +1,83 @@
 # DormFix 작업 로그
 
+## 2026-11-10 - Comment 슬라이스 구현
+
+- 브랜치: `feature/maintenance-comment`를 `feature/maintenance-request-patch` 위에 스택했다. V12가
+  V11 뒤여야 하고 `MaintenanceRequestController`/`SecurityConfiguration`을 PR #21과 같은 자리에서
+  건드리기 때문이다. PR #21이 머지되면 `main`으로 리베이스된다.
+- 사용자 승인으로 `ADR-026`을 Accepted로 전환했다. 승인 시 두 가지를 직접 선택받았다. Comment를
+  받는 상태는 terminal이 아닌 모든 상태(`RESOLVED` 포함)이고, 삭제된 comment는 목록과 개수에서
+  완전히 제외한다. Frozen API specification, permission matrix, ERD에 동기화하고 baseline hash
+  3건을 재계산했다. Frozen error 표의 404 code에 `COMMENT_NOT_FOUND`를 추가했다. Q10은 resolved다.
+- `V12__comment.sql`: ERD대로 `comment`를 만들고 `visibility` CHECK, `content` NOT NULL TEXT,
+  두 FK ON DELETE RESTRICT, `deleted_at >= created_at` CHECK, `(request_id, created_at)` index를
+  두었다. `ck_request_history_event_type`을 교체해 `COMMENT_DELETED`를 더했다. V6~V11은 수정하지
+  않았다.
+- Domain: `Comment`는 `deletedAt`을 제외한 모든 column을 `updatable = false`로 매핑하고 mutator는
+  `softDelete` 하나뿐이다. 수정 경로가 없다. `CommentVisibility` enum을 추가했다.
+- Application: `CommentService`가 add, list, delete를 제공한다.
+  `RequestRelationshipResolver`를 새로 두어 caller가 그 request에 대해 무엇인지(reporter,
+  administrator, current assignee, ever assigned)를 한 곳에서 해석한다. 판단 기준은 role 보유가
+  아니라 관계다. 무관한 `WORKER`나, reporter이면서 `WORKER` role을 가졌지만 배정되지 않은 사람은
+  staff view를 얻지 못한다.
+- API: 경로 셋(POST/GET comments, DELETE /comments/{id})을 추가하고 `SecurityConfiguration`에
+  등록했다. 예외 핸들러에 `COMMENT_NOT_FOUND` 매핑을 추가했다. `visibility`에는 기본값이 없다.
+
+### hard invariant가 샐 수 있는 세 지점을 각각 막았다
+
+"resident는 `STAFF_ONLY`를 받지 않는다"가 실제로 걸리는 첫 슬라이스다. Visit의 `note`는 field
+하나를 가리는 문제였고 여기는 세 군데다.
+
+- **row**: resident 경로와 staff 경로가 `CommentRepository`의 별도 method를 쓴다
+  (`findPublicPage`/`findStaffPage`). 어느 method도 visibility나 boolean flag를 인자로 받지 않으며
+  adapter가 `PUBLIC`을 고정한다. `CommentRepositoryContractTest`가 port에 visibility/boolean 인자를
+  받는 method가 하나도 없음을 reflection으로 단언한다.
+- **개수**: `countPublic`/`countStaff`도 분리했다. resident가 받는 `totalElements`와 `totalPages`는
+  `PUBLIC`만 센다. 통합 테스트가 `PUBLIC` 1개 + `STAFF_ONLY` 3개 상황에서 resident total이 1,
+  staff total이 4임을 확인한다.
+- **삭제 응답**: caller가 읽을 수 없는 comment의 삭제는 없는 comment와 똑같이
+  `404 COMMENT_NOT_FOUND`다. 통합 테스트가 resident의 `STAFF_ONLY` 삭제 시도와 존재하지 않는 id의
+  삭제 시도가 같은 status를 받고, 본문에 `ACCESS_DENIED`나 내용이 없음을 확인한다.
+
+### 그 밖에 테스트로 고정한 것
+
+- 삭제는 `COMMENT_DELETED` history에 actor와 `commentId`만 남기고 content는 담지 않는다. 테스트가
+  metadata에 본문 조각이 없음을 확인한다.
+- former assignee는 계속 읽지만 쓰지 못하고(`403 WORKER_NOT_ASSIGNED`) 자기 comment도 지우지
+  못한다(`403`). hard invariant "former worker has no write authority"의 적용이다.
+- comment 추가는 request의 version과 RequestHistory 개수를 바꾸지 않는다.
+- `RESOLVED`에서는 comment가 되고 `CLOSED`에서는 `409`다. 삭제는 닫힌 request에서도 된다.
+
+### 검증 결과
+
+- 요청 순서대로 전부 통과했다: `gradlew --stop`(No Gradle daemons are running) →
+  `python scripts/check_repository.py` → `git diff --check`(기존 LF/CRLF 경고만) →
+  `check bootJar --no-daemon --console=plain` → `integrationTest --no-daemon --console=plain`.
+- 최종 integrationTest 집계: **22 suites, 147 tests, 0 failures, 0 errors, 0 skipped.** Comment
+  신규 기여는 16이다. 통합 테스트 첫 실행에서 실패가 없었다. 실행 로그의 Hikari
+  "Failed to validate connection" WARN은 종료된 테스트 컨테이너에 대한 pool housekeeper 로그이며
+  테스트 실패가 아니다.
+- 캐시나 빌드 산출물을 삭제하지 않았고 commit, push, reset, checkout을 수행하지 않았다.
+
+### 남은 작업과 주의사항
+
+- 커밋되지 않은 변경이 `feature/maintenance-comment`에 남아 있다. PR #21(metadata PATCH)이 머지된
+  뒤 `main`으로 리베이스해 PR을 올리는 것이 깔끔하다.
+- Phase 3 남은 범위는 attachment 하나다. S3 presigned(ADR-008/010), 업로드 후 metadata 등록,
+  용량·타입 검증(`INVALID_FILE_TYPE`, `FILE_TOO_LARGE`), 고아 객체 정리 정책까지 얽혀 가장 크다.
+  `SecurityBoundaryTest`의 "미구현 경로" 목록에는 이제 attachments만 남아 있다.
+- `RequestRelationshipResolver`는 이번에 새로 만들어 `CommentService`만 쓴다.
+  `MaintenanceVisitService`, `WorkLogService`, `MaintenanceRequestQueryService`,
+  `MaintenanceRequestLifecycleService`는 여전히 같은 종류의 관계 판단을 각자 inline으로 한다.
+  AGENTS.md의 "공통 규칙을 feature마다 복제하지 않는다"에 비추면 정리 대상이며, 전체 코드리뷰 때
+  이 resolver로 모으는 것을 검토한다.
+- 삭제된 comment의 `content`는 database에 남는다. 개인정보를 이유로 지운 경우에도 row는 남으므로
+  실제 파기가 필요하면 별도 운영 절차가 필요하다. V1은 이를 다루지 않으며 ADR-026 Consequences에
+  기록했다.
+- 열린 PR: #21(metadata PATCH), #9(setup-java, dependabot 리베이스 대기), #16(Gradle 9.8.2 전용
+  작업).
+- 전체 코드리뷰는 Phase 3 완료 후 인증 슬라이스부터 하나씩 수행한다.
+
 ## 2026-11-10 - MaintenanceRequest metadata PATCH 슬라이스 구현
 
 - 브랜치: `feature/maintenance-request-patch`를 `feature/maintenance-work-log` 위에 스택했다. PATCH가
