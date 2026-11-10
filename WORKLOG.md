@@ -1,5 +1,75 @@
 # DormFix 작업 로그
 
+## 2026-11-10 - MaintenanceRequest metadata PATCH 슬라이스 구현
+
+- 브랜치: `feature/maintenance-request-patch`를 `feature/maintenance-work-log` 위에 스택했다. PATCH가
+  `MaintenanceRequestController`와 `SecurityConfiguration`을 PR #20과 같은 자리에서 건드리므로
+  충돌을 피하기 위해서다. PR #20이 머지되면 `main`으로 리베이스된다.
+- 사용자 승인으로 `ADR-025`를 Accepted로 전환했다. `spaceId`를 PATCH로 바꾸지 않는 것, 두 role을
+  겸한 caller를 administrator로 해석하는 것, 값이 바뀌지 않은 PATCH가 `version`을 올리지 않는 것이
+  제안대로 확정되었다. Frozen API specification, permission matrix(field matrix 표), ERD에
+  동기화하고 baseline hash 3건을 재계산했다. Q09는 resolved다. Frozen API specification이
+  "Exact patch field matrices are a review item"으로 지목했던 공백이 이 ADR로 닫혔다.
+- `V11__maintenance_request_metadata_patch.sql`: `ck_request_history_event_type`을 교체해
+  `CATEGORY_CHANGED`, `PRIORITY_CHANGED`, `REQUEST_METADATA_UPDATED`를 더했다. V6~V10은 수정하지
+  않았다. 테이블 변경은 없다.
+- Domain: `MaintenanceRequest.reviseReport`(resident field, `REPORTED`에서만)와
+  `reclassify`(administrator field, active 상태에서만)를 추가했다. 둘 다 모든 field의 최종값을
+  받아 실제로 바뀐 field 이름 목록을 안정된 순서로 반환하고, 바뀐 것이 없으면 `updatedAt`도
+  건드리지 않는다. 어느 command도 `spaceId`를 파라미터로 받지 않는다. `isActive()`를 추가했다.
+- Application: `MaintenanceRequestPatchService`가 `patchAsResident`와 `patchAsAdministrator`를
+  제공한다. 인가 → version → state → reference 검증 순서를 지킨다. category와 facility는 값이 실제로
+  바뀔 때만 검증해서, 같은 값을 다시 보낸 no-op이 비활성 category 때문에 409가 되지 않는다.
+  history `metadata`에는 `{"fields":[...]}`로 이름만 담는다. `PatchField`가 생략과 명시적 null을
+  구분한다.
+- API: `MetadataPatchParser`가 원시 JSON tree를 role별 닫힌 allow-list로 해석한다. Record에
+  binding하지 않는 이유는 PATCH가 생략과 명시적 null을 구분해야 하기 때문이다. 상대 집합의 field나
+  metadata가 아닌 field는 unknown으로 `400`이다. `SecurityConfiguration`에 PATCH 경로를 등록했다.
+- 상세 결과 매핑을 `MaintenanceRequestDetailResult.of(...)`로 옮겨 `MaintenanceRequestQueryService`와
+  PATCH 응답이 공유하게 했다. 매핑 복제를 피하기 위한 것이다.
+- `SecurityBoundaryTest`: PATCH가 구현되었으므로 "미구현 경로" 목록에서 빼고(이제 comments와
+  attachments만 남는다) "구현된 경로는 deny-all에 막히지 않는다" 테스트로 옮겼다. 단언을 약화시킨
+  것이 아니라 전제가 바뀐 것을 따라간 것이다.
+
+### 테스트로 고정한 것
+
+- `MetadataPatchParserTest`: 두 field 집합의 교집합이 `version`뿐임을, `status`/`spaceId`/
+  `reporterId` 등 금지 field가 어느 집합에도 없음을 직접 단언한다. 나중에 누군가 한쪽 집합에 상대
+  field를 추가하면 빌드가 깨진다. ADR-025 Consequences가 지목한 위험에 대한 방어다.
+- `MaintenanceRequestPatchTest`: 바뀐 field 이름만 반환, 동일 값이면 아무것도 건드리지 않음,
+  category 변경이 priority를 재설정하지 않음, 희망 시간의 pair 규칙, 상태 제한, setter 부재.
+- `MaintenanceRequestPatchIntegrationTest` 13개: resident가 priority/category/facility/status/space에
+  닿지 못함, administrator가 entry consent와 신고 본문에 닿지 못함, history metadata에 값이 없고
+  이름만 있음, category와 priority가 별개 행으로 audit됨, facility 설정·해제·space 검증·RETIRED 거부·
+  OUT_OF_SERVICE 허용, scope와 active 상태 제한, 희망 시간 설정·해제·pair, stale version, 값이 바뀌지
+  않은 PATCH의 version과 history 불변, WORKER 403, dual-role caller의 administrator 해석.
+
+### 검증 결과
+
+- 요청 순서대로 전부 통과했다: `gradlew --stop`(No Gradle daemons are running) →
+  `python scripts/check_repository.py` → `git diff --check`(기존 LF/CRLF 경고만) →
+  `check bootJar --no-daemon --console=plain` → `integrationTest --no-daemon --console=plain`.
+- 최종 integrationTest 집계: **21 suites, 131 tests, 0 failures, 0 errors, 0 skipped.** PATCH 신규
+  기여는 13이다. 첫 `integrationTest` 시도는 Docker Desktop이 꺼져 있어 `initializationError`였고,
+  Docker를 기동한 뒤 재실행했다. 코드 문제로 인한 실패는 없었다.
+- 캐시나 빌드 산출물을 삭제하지 않았고 commit, push, reset, checkout을 수행하지 않았다.
+
+### 남은 작업과 주의사항
+
+- 커밋되지 않은 변경이 `feature/maintenance-request-patch`에 남아 있다. PR #20(WorkLog)이 CI 4/4
+  녹색으로 머지 대기 중이며, 머지 후 이 브랜치를 `main`으로 리베이스해 PR을 올리는 것이 깔끔하다.
+- 이 슬라이스로 신고 aggregate 자체가 완성되었다. Phase 3 남은 범위는 comment와 attachment 두 하위
+  aggregate다. Comment는 `CommentVisibility`와 soft-delete 정책을, attachment는 S3 presigned
+  (ADR-008/010)를 함께 결정해야 한다.
+- Frozen에서 온 제약: resident는 `REPORTED` 이후 출입 동의를 바꿀 수 없다. ADR-025가 완화하지
+  않았으며 실무에서 문제가 되면 별도 계약 변경 사안이다.
+- 생성 DTO의 `description`에는 여전히 상한이 없다(deferred 지적 3번). PATCH 경로는 2000자 상한을
+  두었으므로 두 경로가 불일치한다. 전체 코드리뷰 때 생성 쪽을 맞춘다.
+- RequestHistory event type을 늘리는 슬라이스는 `ck_request_history_event_type`을 또 교체해야 한다.
+  V7, V8, V9, V11이 선례다.
+- 열린 PR: #20(WorkLog), #9(setup-java, dependabot 리베이스 대기), #16(Gradle 9.8.2 전용 작업).
+- 전체 코드리뷰는 Phase 3 완료 후 인증 슬라이스부터 하나씩 수행한다.
+
 ## 2026-11-08 - WorkLog 슬라이스 구현
 
 - 브랜치: `feature/maintenance-work-log`를 `feature/maintenance-visit` 위에 스택했다. V10의

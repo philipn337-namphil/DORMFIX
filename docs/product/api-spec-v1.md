@@ -284,6 +284,47 @@ Appending a work log writes no RequestHistory row and does not modify the reques
 `updated_at`, no `version`, and no version check. Work logs are append-only with no update or
 delete path.
 
+### Maintenance request metadata PATCH
+
+`PATCH /maintenance-requests/{id}` uses two allow-listed DTOs on one path, selected by the role of
+the caller. A caller holding `ADMIN` or `SUPER_ADMIN` sends
+`AdminUpdateMaintenanceRequest(categoryId?, priority?, facilityId?, version)`; a caller holding only
+`RESIDENT` sends `ResidentUpdateMaintenanceRequest(title?, description?, entryPolicy?,
+contactBeforeEntry?, preferredVisitStart?, preferredVisitEnd?, version)`. The two field sets do not
+intersect, and a field from the other set is an unknown field, `400 VALIDATION_FAILED`. A caller
+holding both a resident and an administrator role is interpreted as an administrator. No role can
+change `status`, `reporterId`, `requestNumber`, `spaceId`, `duplicateOfId`, `statusReason`, a
+lifecycle timestamp or anything about assignment through this path.
+
+A `RESIDENT` may patch only a request they reported and only while it is `REPORTED`; a request
+reported by someone else is `403 ACCESS_DENIED` and any other status is
+`409 INVALID_REQUEST_STATE`. An administrator may patch while the request is `REPORTED`, `ASSIGNED`,
+`IN_PROGRESS` or `ON_HOLD`; `RESOLVED` and the terminal states are `409 INVALID_REQUEST_STATE`. An
+`ADMIN` needs the dormitory of the request in scope, otherwise `403 ACCESS_DENIED`. Authorization is
+evaluated before state checks.
+
+`spaceId` is never patched: creation anchors it to the current Residence room of the reporter, and
+moving it afterwards would reduce that rule to a creation-time formality. `facilityId` may be set,
+replaced, or cleared with an explicit `null`; a new value must belong to the space of the request
+and must not be `RETIRED`, otherwise `409 INVALID_REQUEST_STATE`, and a missing facility is
+`404 FACILITY_NOT_FOUND`. A new `categoryId` must be active, otherwise
+`409 INVALID_REQUEST_STATE`, and a missing category is `404 CATEGORY_NOT_FOUND`. Changing
+`categoryId` never resets `priority` to the new category default.
+
+Only fields present in the body change. `facilityId`, `preferredVisitStart` and
+`preferredVisitEnd` accept an explicit `null` to clear; `null` for any other field is
+`400 VALIDATION_FAILED`. After the patch the preferred visit timestamps must be both absent or both
+present with `preferredVisitStart < preferredVisitEnd`, otherwise `400 INVALID_VISIT_TIME`. `title`
+is at most 150 characters and `description` at most 2000.
+
+`version` is required; a mismatch or an optimistic-locking failure is `409 VERSION_CONFLICT`. A
+patch that changes a value increments `version`, and the response is the request detail DTO. A patch
+that changes nothing writes no history, does not increment `version`, and returns the current
+state. A changed `categoryId` appends `CATEGORY_CHANGED`, a changed `priority` appends
+`PRIORITY_CHANGED`, and any other changed field appends one `REQUEST_METADATA_UPDATED`; a patch that
+changes both category and priority appends both rows. `metadata` carries the names of the changed
+fields only, never their values, so entry consent and free text are not copied into audit rows.
+
 ### Structure administration
 
 All structure-management paths use the `/admin` prefix. These endpoints are part of the frozen contract but are not implemented yet.

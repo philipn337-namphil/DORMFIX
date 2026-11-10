@@ -11,6 +11,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -145,6 +147,96 @@ public class MaintenanceRequest {
         }
         this.duplicateOfId = originalId;
         return transition(RequestStatus.DUPLICATE, occurredAt, reason);
+    }
+
+    /**
+     * States in which an administrator may still adjust classification. The frozen matrix calls
+     * this an active request; RESOLVED is excluded so finished work and its record cannot drift.
+     */
+    public boolean isActive() {
+        return isAssignable();
+    }
+
+    /**
+     * Resident-owned metadata, changeable only while REPORTED. Takes the final value of every
+     * field and returns the names of those that actually changed, in a stable order, so the caller
+     * can audit names without copying values. Nothing is touched when nothing changed.
+     */
+    public List<String> reviseReport(String newTitle, String newDescription,
+            EntryPolicy newEntryPolicy, boolean newContactBeforeEntry,
+            Instant newPreferredVisitStart, Instant newPreferredVisitEnd, Instant occurredAt) {
+        require(RequestStatus.REPORTED);
+        Objects.requireNonNull(newTitle);
+        Objects.requireNonNull(newDescription);
+        Objects.requireNonNull(newEntryPolicy);
+        boolean hasStart = newPreferredVisitStart != null;
+        boolean hasEnd = newPreferredVisitEnd != null;
+        if (hasStart != hasEnd
+                || hasStart && !newPreferredVisitStart.isBefore(newPreferredVisitEnd)) {
+            throw new IllegalArgumentException("Preferred visit window is invalid.");
+        }
+        List<String> changed = new ArrayList<>();
+        if (!newTitle.equals(title)) {
+            changed.add("title");
+            this.title = newTitle;
+        }
+        if (!newDescription.equals(description)) {
+            changed.add("description");
+            this.description = newDescription;
+        }
+        if (newEntryPolicy != entryPolicy) {
+            changed.add("entryPolicy");
+            this.entryPolicy = newEntryPolicy;
+        }
+        if (newContactBeforeEntry != contactBeforeEntry) {
+            changed.add("contactBeforeEntry");
+            this.contactBeforeEntry = newContactBeforeEntry;
+        }
+        if (!Objects.equals(newPreferredVisitStart, preferredVisitStart)) {
+            changed.add("preferredVisitStart");
+            this.preferredVisitStart = newPreferredVisitStart;
+        }
+        if (!Objects.equals(newPreferredVisitEnd, preferredVisitEnd)) {
+            changed.add("preferredVisitEnd");
+            this.preferredVisitEnd = newPreferredVisitEnd;
+        }
+        touchIfChanged(changed, occurredAt);
+        return List.copyOf(changed);
+    }
+
+    /**
+     * Administrator-owned classification, changeable while the request is active. Changing the
+     * category never resets the priority: after creation the priority is an operational decision.
+     * The space is deliberately not a parameter, because the reporting rule anchors it.
+     */
+    public List<String> reclassify(Long newCategoryId, Priority newPriority, Long newFacilityId,
+            Instant occurredAt) {
+        if (!isActive()) {
+            throw new IllegalStateException("Request cannot be reclassified from " + status + ".");
+        }
+        Objects.requireNonNull(newCategoryId);
+        Objects.requireNonNull(newPriority);
+        List<String> changed = new ArrayList<>();
+        if (!newCategoryId.equals(categoryId)) {
+            changed.add("categoryId");
+            this.categoryId = newCategoryId;
+        }
+        if (newPriority != priority) {
+            changed.add("priority");
+            this.priority = newPriority;
+        }
+        if (!Objects.equals(newFacilityId, facilityId)) {
+            changed.add("facilityId");
+            this.facilityId = newFacilityId;
+        }
+        touchIfChanged(changed, occurredAt);
+        return List.copyOf(changed);
+    }
+
+    private void touchIfChanged(List<String> changed, Instant occurredAt) {
+        if (!changed.isEmpty()) {
+            this.updatedAt = Objects.requireNonNull(occurredAt);
+        }
     }
 
     private void require(RequestStatus expected) {

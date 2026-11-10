@@ -6,6 +6,7 @@ import com.dormfix.maintenance.application.LifecycleCommand;
 import com.dormfix.maintenance.application.MaintenanceRequestAssignmentService;
 import com.dormfix.maintenance.application.MaintenanceRequestCreationService;
 import com.dormfix.maintenance.application.MaintenanceRequestLifecycleService;
+import com.dormfix.maintenance.application.MaintenanceRequestPatchService;
 import com.dormfix.maintenance.application.MaintenanceRequestQuery;
 import com.dormfix.maintenance.application.MaintenanceRequestQueryService;
 import com.dormfix.maintenance.application.MaintenanceVisitService;
@@ -14,6 +15,7 @@ import com.dormfix.maintenance.application.UpdateVisitCommand;
 import com.dormfix.maintenance.application.AppendWorkLogCommand;
 import com.dormfix.maintenance.application.VisitOutcomeCommand;
 import com.dormfix.maintenance.application.WorkLogService;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.LinkedHashSet;
@@ -42,18 +44,20 @@ public class MaintenanceRequestController {
     private final MaintenanceRequestLifecycleService lifecycle;
     private final MaintenanceVisitService visits;
     private final WorkLogService workLogs;
+    private final MaintenanceRequestPatchService patches;
 
     public MaintenanceRequestController(MaintenanceRequestCreationService creation,
             MaintenanceRequestQueryService queries,
             MaintenanceRequestAssignmentService assignments,
             MaintenanceRequestLifecycleService lifecycle, MaintenanceVisitService visits,
-            WorkLogService workLogs) {
+            WorkLogService workLogs, MaintenanceRequestPatchService patches) {
         this.creation = creation;
         this.queries = queries;
         this.assignments = assignments;
         this.lifecycle = lifecycle;
         this.visits = visits;
         this.workLogs = workLogs;
+        this.patches = patches;
     }
 
     @PostMapping(BASE)
@@ -221,6 +225,26 @@ public class MaintenanceRequestController {
             @RequestParam(defaultValue = "20") int size, @AuthenticationPrincipal Jwt jwt) {
         return WorkLogPageResponse
                 .from(workLogs.listForRequest(id, page, size, id(jwt), roles(jwt)));
+    }
+
+    /**
+     * One path, two allow-listed field sets, selected by role. A caller with an administrator role
+     * is read as an administrator even when they also hold RESIDENT, so the two sets are never
+     * mixed in one request.
+     */
+    @PatchMapping(BASE + "/{id}")
+    public MaintenanceRequestDetailResponse patch(@PathVariable Long id,
+            @RequestBody JsonNode body, @AuthenticationPrincipal Jwt jwt) {
+        Set<String> roles = roles(jwt);
+        if (roles.contains("ADMIN") || roles.contains("SUPER_ADMIN")) {
+            return MaintenanceRequestDetailResponse.from(patches.patchAsAdministrator(
+                    MetadataPatchParser.administrator(id, body), id(jwt), roles));
+        }
+        if (roles.contains("RESIDENT")) {
+            return MaintenanceRequestDetailResponse.from(patches.patchAsResident(
+                    MetadataPatchParser.resident(id, body), id(jwt), roles));
+        }
+        throw new AccessDeniedException("Access is denied.");
     }
 
     private LifecycleCommand command(Long id, LifecycleCommandRequest value) {

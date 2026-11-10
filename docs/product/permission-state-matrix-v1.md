@@ -24,6 +24,35 @@ CLOSED, REJECTED, DUPLICATE는 terminal이다. 다른 transition은 허용하지
 - ADMIN: dormitory scope의 전체 request 조회, active request의 허용된 category/priority/location 조정, assign/reassign, REPORTED reject/duplicate, visit 관리, RESOLVED close/reopen, scope 내 Facility 관리와 Facility status command 수행. Resident entry consent를 대신 변경하지 않으며 MaintenanceCategory를 관리하지 않는다.
 - SUPER_ADMIN: ADMIN 기능과 전체 Dormitory/Building/Space/Facility, user-role 및 전역 system/master-data 관리를 가진다. MaintenanceCategory는 V1 전역 Master Data이므로 SUPER_ADMIN 전용이다. 모든 domain state rule은 동일하게 적용된다.
 
+## MaintenanceRequest metadata PATCH field matrix
+
+| Field | RESIDENT | scoped ADMIN / SUPER_ADMIN |
+|---|---|---|
+| `title`, `description` | 수정 가능 | 불가 |
+| `entryPolicy`, `contactBeforeEntry` | 수정 가능 | 불가 |
+| `preferredVisitStart`, `preferredVisitEnd` | 수정 가능 | 불가 |
+| `categoryId`, `priority`, `facilityId` | 불가 | 수정 가능 |
+
+- 두 집합은 교집합이 없다. 경로는 하나지만 DTO는 둘이고 caller의 role로 해석한다. 상대 집합의
+  field는 unknown field로 `400 VALIDATION_FAILED`다. 두 role을 겸한 caller는 administrator로 해석한다.
+- `status`, `reporterId`, `requestNumber`, `spaceId`, `duplicateOfId`, `statusReason`, lifecycle
+  timestamp, assignment는 어떤 role도 PATCH로 바꾸지 못한다.
+- RESIDENT는 본인이 reporter이고 request가 `REPORTED`일 때만 수정한다. 타인의 request는
+  `403 ACCESS_DENIED`, 다른 status는 `409 INVALID_REQUEST_STATE`다.
+- Administrator는 `REPORTED`/`ASSIGNED`/`IN_PROGRESS`/`ON_HOLD`에서만 수정한다. `RESOLVED`와
+  terminal은 `409 INVALID_REQUEST_STATE`다. ADMIN은 request의 dormitory scope가 필요하다.
+- `spaceId`는 PATCH가 받지 않는다. matrix의 "location 조정"은 `facilityId`로 해석한다.
+  `facilityId`는 설정·교체·명시적 null 해제가 가능하고, 새 값은 request의 space에 속하며
+  `RETIRED`가 아니어야 한다.
+- `categoryId`를 바꿔도 `priority`는 새 category default로 재설정되지 않는다. 새 category는
+  활성이어야 한다.
+- 본문에 있는 field만 바꾼다. 명시적 null 해제는 `facilityId`와 희망 시간 둘에만 허용한다. 수정
+  후 희망 시간은 both-or-neither이고 `start < end`여야 하며 아니면 `400 INVALID_VISIT_TIME`다.
+- `version`은 필수이고 불일치는 `409 VERSION_CONFLICT`다. 값이 바뀌지 않은 PATCH는 history를
+  남기지 않고 `version`을 올리지 않는다.
+- `categoryId` 변경은 `CATEGORY_CHANGED`, `priority` 변경은 `PRIORITY_CHANGED`, 그 외 변경은
+  `REQUEST_METADATA_UPDATED`를 남긴다. `metadata`에는 바뀐 field 이름만 담고 값은 담지 않는다.
+
 ## WorkLog 세부
 
 - 작성은 `AppendWorkLogRequest(actionType, description, visitId?)`를 받고 `worker_id`는 JWT
