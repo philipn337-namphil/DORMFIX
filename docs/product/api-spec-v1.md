@@ -325,6 +325,46 @@ state. A changed `categoryId` appends `CATEGORY_CHANGED`, a changed `priority` a
 changes both category and priority appends both rows. `metadata` carries the names of the changed
 fields only, never their values, so entry consent and free text are not copied into audit rows.
 
+### Maintenance request comments
+
+`POST /maintenance-requests/{id}/comments` takes `AddCommentRequest(content, visibility)`. It never
+accepts `authorId`, `createdAt` or `id`; `author_id` is the JWT subject. `content` is required and
+at most 2000 characters. `visibility` is required and has no default, so an internal remark cannot
+become public through an omitted field; an unparsable value is `400 VALIDATION_FAILED`.
+
+Write authority follows the relationship of the caller to the request, not the role alone. The
+reporter `RESIDENT` may write `PUBLIC`. The current active assignee `WORKER`, an `ADMIN` with the
+dormitory of the request in scope, and a `SUPER_ADMIN` may write `PUBLIC` or `STAFF_ONLY`. A caller
+without such a staff relationship who sends `STAFF_ONLY` receives `403 ACCESS_DENIED`, including a
+reporter who also holds `WORKER` but is not assigned to the request. A former assignee receives
+`403 WORKER_NOT_ASSIGNED`. A request outside read visibility is `404 REQUEST_NOT_FOUND`.
+
+A comment may be added while the request is not terminal, which includes `RESOLVED`; on `CLOSED`,
+`REJECTED` or `DUPLICATE` it is `409 INVALID_REQUEST_STATE`. Adding a comment does not modify the
+request, performs no version check, and writes no RequestHistory row.
+
+`GET /maintenance-requests/{id}/comments` reuses the request read visibility. A reader with a staff
+relationship to the request - a `SUPER_ADMIN`, a scoped `ADMIN`, or a `WORKER` with any assignment
+row for it, current or ended - receives `PUBLIC` and `STAFF_ONLY` comments. Any other reader, which
+is the reporter `RESIDENT`, receives `PUBLIC` only, and `totalElements` and `totalPages` then count
+`PUBLIC` comments only, so the number of internal remarks is not disclosed. The filter is applied in
+the query. The list returns `CommentPageResponse` ordered `createdAt ASC, id ASC`; `page` is
+zero-based with default `0` and `size` is `1..100` with default `20`, and a violation is
+`400 VALIDATION_FAILED`. The item DTO is
+`CommentResponse(id, requestId, authorId, content, visibility, createdAt)`.
+
+`DELETE /comments/{commentId}` soft-deletes by setting `deleted_at` and returns `204 No Content`.
+The author may delete their own comment while they still hold the relationship that lets them
+write on the request, so a former assignee cannot. A scoped `ADMIN` or a `SUPER_ADMIN` may delete
+any comment. Deletion is not gated by request status. A deleted comment disappears from every
+listing and count while its row is retained. Deletion appends a `COMMENT_DELETED` RequestHistory
+row carrying the actor and `{"commentId": <id>}` and never the content.
+
+A comment the caller cannot read answers `404 COMMENT_NOT_FOUND` on delete: a missing comment, an
+already deleted one, one on a request outside visibility, and a `STAFF_ONLY` comment named by a
+resident are indistinguishable, so the path does not disclose internal remarks. A comment the
+caller can read but may not delete is `403 ACCESS_DENIED`. There is no comment update path.
+
 ### Structure administration
 
 All structure-management paths use the `/admin` prefix. These endpoints are part of the frozen contract but are not implemented yet.
@@ -382,7 +422,7 @@ Authorize request -> server issues S3 presigned upload URL -> client uploads dir
 | 400 | Input validation | INVALID_VISIT_TIME, INVALID_ENTRY_POLICY, INVALID_FILE_TYPE, FILE_TOO_LARGE |
 | 401 | Authentication missing/invalid | AUTHENTICATION_REQUIRED |
 | 403 | Authenticated but wrong role/ownership/current assignment | ACCESS_DENIED, WORKER_NOT_ASSIGNED |
-| 404 | Resource does not exist | USER_NOT_FOUND, SPACE_NOT_FOUND, FACILITY_NOT_FOUND, REQUEST_NOT_FOUND, WORKER_NOT_FOUND, VISIT_NOT_FOUND, ATTACHMENT_NOT_FOUND |
+| 404 | Resource does not exist | USER_NOT_FOUND, SPACE_NOT_FOUND, FACILITY_NOT_FOUND, REQUEST_NOT_FOUND, WORKER_NOT_FOUND, VISIT_NOT_FOUND, COMMENT_NOT_FOUND, ATTACHMENT_NOT_FOUND |
 | 409 | Business state/concurrency conflict | INVALID_REQUEST_STATE, REQUEST_ALREADY_ASSIGNED, INVALID_FACILITY_STATE, VERSION_CONFLICT |
 
 INVALID_WORKER is also a representative frozen code; exact validation-vs-business-conflict mapping must be specified by assignment API review. Do not map every integrity constraint error to VERSION_CONFLICT.

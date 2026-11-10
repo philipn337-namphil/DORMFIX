@@ -4,6 +4,28 @@
 
 각 질문은 소유 feature slice에서 evidence와 함께 검토하고, 필요하면 proposed ADR로 올린다. 승인 전에는 기존 state, permission, ERD, API semantics를 유지한다.
 
+## Resolved Comment 계약
+
+2026-11-10 human approval으로 [ADR-026](../adr/ADR-026-comment-contract.md)의 V1 Comment 계약을
+확정했다. Q10은 resolved 되었다. Frozen이 "Soft-delete under reviewed policy"로 열어둔 삭제 정책과
+"Read permitted comments"의 필터가 아래로 닫혔다.
+
+- create DTO는 `AddCommentRequest(content, visibility)`다. `visibility`에 기본값을 두지 않는다.
+- 작성 권한은 role이 아니라 request에 대한 관계로 정한다. reporter resident는 `PUBLIC`, current
+  active assignee와 scoped ADMIN/SUPER_ADMIN은 둘 다 쓴다. administrator의 작성은 matrix에 없던
+  내용을 추가하는 것이다.
+- comment를 받는 상태는 terminal이 아닌 모든 상태다. `RESOLVED`를 포함하며 ADR-025의 분류 수정
+  상태보다 넓다.
+- resident reader는 `PUBLIC`만 받고 `totalElements`도 `PUBLIC`만 센다. staff view는 role이 아니라
+  그 request에 대한 staff 관계로 정한다. 두 경로는 별도 query를 쓴다.
+- soft-delete는 작성자 본인(현재도 쓸 수 있는 관계일 때)과 scoped ADMIN/SUPER_ADMIN이 한다. 삭제된
+  comment는 목록과 개수에서 빠진다. 지운 사람은 `COMMENT_DELETED` RequestHistory 행으로 남긴다.
+- 보이지 않는 comment의 삭제는 `404 COMMENT_NOT_FOUND`다. `COMMENT_NOT_FOUND`는 새 code다.
+- 수정 경로는 없다. 목록은 `createdAt ASC, id ASC`이고 페이징한다. `content`는 최대 2000자다.
+
+전체 DTO, 권한, 가시성, 삭제 정책, V12 물리 규칙은 Frozen API specification과 permission matrix,
+ERD에 동기화되어 있다.
+
 ## Resolved MaintenanceRequest metadata PATCH 계약
 
 2026-11-10 human approval으로

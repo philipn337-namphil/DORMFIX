@@ -6,6 +6,7 @@ import com.dormfix.location.application.BuildingNotFoundException;
 import com.dormfix.location.application.DormitoryNotFoundException;
 import com.dormfix.location.application.FacilityNotFoundException;
 import com.dormfix.location.application.SpaceNotFoundException;
+import com.dormfix.maintenance.application.CommentNotFoundException;
 import com.dormfix.maintenance.application.InvalidEntryPolicyException;
 import com.dormfix.maintenance.application.InvalidMaintenanceQueryException;
 import com.dormfix.maintenance.application.InvalidPreferredVisitTimeException;
@@ -40,7 +41,7 @@ public class MaintenanceRequestExceptionHandler {
             DormitoryNotFoundException.class, FacilityNotFoundException.class,
             MaintenanceCategoryNotFoundException.class, UserNotFoundException.class,
             MaintenanceRequestNotFoundException.class, WorkerNotFoundException.class,
-            VisitNotFoundException.class})
+            VisitNotFoundException.class, CommentNotFoundException.class})
     ResponseEntity<ApiError> notFound(RuntimeException error, HttpServletRequest request) {
         return response(request, HttpStatus.NOT_FOUND, code(error), "Resource was not found.", List.of());
     }
@@ -181,6 +182,9 @@ public class MaintenanceRequestExceptionHandler {
         }
         if (error instanceof VisitNotFoundException) {
             return "VISIT_NOT_FOUND";
+        }
+        if (error instanceof CommentNotFoundException) {
+            return "COMMENT_NOT_FOUND";
         }
         // No guessed default: an unmapped type must not silently answer with another frozen code.
         throw new IllegalStateException("Unmapped not-found exception: " + error.getClass());
