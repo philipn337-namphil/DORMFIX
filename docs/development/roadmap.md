@@ -11,7 +11,7 @@
 | 2 | 구조 데이터 | 완료 (`feature/manage-dormitory-structure`, residence 포함) |
 | 3 | 신고 핵심 | 완료 (PR #14 이후, ADR-019~027) |
 | 4 | 배정 / 상태전이 | 완료 (Phase 3 workflow 슬라이스에 포함, PR #18) |
-| 5 | Workflow 완성 | 일부 완료. Visit, WorkLog, metadata PATCH, Comment, Attachment metadata 완료. History 조회, Notification, Domain Event side effect, Admin 조회 남음 |
+| 5 | Workflow 완성 | 일부 완료. Visit, WorkLog, metadata PATCH, Comment, Attachment metadata, History 조회(ADR-028) 완료. Notification, Domain Event side effect, Admin 조회 남음 |
 | 6 | Docker 통합 | 부분 완료. 로컬 Compose와 image build는 있음. 전체 smoke gate 정리 남음 |
 | 7 | 전통 AWS 배포 (EC2) | 예정 |
 | 8 | AWS managed service 연동 | 예정 |
@@ -45,7 +45,7 @@ Branches: `feature/manage-maintenance-visits`, `feature/maintenance-communicatio
 
 남은 V1 범위(2026-11-27 기준, Frozen API와 구현 대조):
 
-- `GET /maintenance-requests/{id}/history` 조회. RequestHistory 행은 이미 기록되지만 조회 경로가 없다.
+- ~~`GET /maintenance-requests/{id}/history` 조회~~ 2026-11-27 ADR-028로 구현했다(`feature/request-history`).
 - Notification 경로 넷(`GET /notifications`, `PATCH /notifications/{id}/read`, `POST /notifications/read-all`, `GET /notifications/unread-count`)과 AFTER_COMMIT domain event side effect. Notification DB write는 별도 transaction이다.
 - Admin `GET users`, `GET dashboard summary`. Frozen API가 이름만 언급하고 DTO가 없으므로 계약 공백 조사와 Proposed ADR이 먼저다.
 

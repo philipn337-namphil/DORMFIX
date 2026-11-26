@@ -22,6 +22,7 @@ import com.dormfix.maintenance.application.MaintenanceRequestPatchService;
 import com.dormfix.maintenance.application.MaintenanceVisitService;
 import com.dormfix.maintenance.application.WorkLogService;
 import com.dormfix.maintenance.application.MaintenanceRequestQueryService;
+import com.dormfix.maintenance.application.RequestHistoryQueryService;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.junit.jupiter.api.Test;
@@ -82,6 +83,8 @@ class SecurityBoundaryTest {
     @MockitoBean
     private AttachmentService attachmentService;
     @MockitoBean
+    private RequestHistoryQueryService requestHistoryQueryService;
+    @MockitoBean
     private JwtDecoder jwtDecoder;
     @MockitoBean
     private JwtAuthenticationConverter jwtAuthenticationConverter;
@@ -136,6 +139,9 @@ class SecurityBoundaryTest {
                             .assertThat(result.getResponse().getStatus()).isNotEqualTo(403));
         }
         mvc.perform(patch("/api/v1/maintenance-requests/1"))
+                .andExpect(result -> org.assertj.core.api.Assertions
+                        .assertThat(result.getResponse().getStatus()).isNotEqualTo(403));
+        mvc.perform(get("/api/v1/maintenance-requests/1/history"))
                 .andExpect(result -> org.assertj.core.api.Assertions
                         .assertThat(result.getResponse().getStatus()).isNotEqualTo(403));
     }

@@ -4,6 +4,19 @@
 
 각 질문은 소유 feature slice에서 evidence와 함께 검토하고, 필요하면 proposed ADR로 올린다. 승인 전에는 기존 state, permission, ERD, API semantics를 유지한다.
 
+## Resolved RequestHistory 조회 계약
+
+2026-11-27 human approval으로 [ADR-028](../adr/ADR-028-request-history-query-contract.md)의 V1
+RequestHistory 조회 계약을 확정했다. Frozen API가 "public history projections require slice
+contracts"로 남긴 공백과, ADR-022가 정했지만 구현되지 않았던 lifecycle reason 기록이 아래로 닫혔다.
+
+- 가시성은 request read 가시성과 같고 가시성 밖은 `404 REQUEST_NOT_FOUND`다.
+- Resident view는 `COMMENT_DELETED` 행을 받지 않으며 개수도 같은 기준이다. Staff view는 모든 행이다.
+- Raw `metadata`는 응답하지 않고 typed field로 투영한다. 정렬은 `createdAt ASC, id ASC`, 페이징은
+  `1..100`(default 20)이다.
+- Lifecycle 여덟 command는 `statusReason`을 history `metadata.reason`에 기록한다. 과거 행은
+  backfill하지 않는다. Migration은 없다.
+
 ## Resolved Attachment 계약
 
 2026-11-10 human approval으로 [ADR-027](../adr/ADR-027-attachment-contract.md)의 V1 Attachment

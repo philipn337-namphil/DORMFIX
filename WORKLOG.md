@@ -1,5 +1,31 @@
 # DormFix 작업 로그
 
+## 2026-11-27 - RequestHistory 조회 슬라이스 구현 (ADR-028)
+
+- 사용자 승인으로 ADR-028을 Accepted로 확정했다. Frozen API, permission matrix, ERD를 동기화하고
+  `frozen-baseline.sha256.json`을 갱신했다. ADR 색인과 `open-questions.md`에 resolved 항목을 추가했다.
+- 구현: `GET /api/v1/maintenance-requests/{id}/history`.
+  - `RequestHistoryQueryService`(새 서비스): read 가시성은 `RequestRelationshipResolver` 재사용, 밖은
+    `404 REQUEST_NOT_FOUND`. staff view는 전체, resident view는 `COMMENT_DELETED` 제외(개수도 동일).
+  - `RequestHistoryRepository`에 staff/resident 조회 method를 따로 두고 제외 event type은 adapter에
+    고정했다. 계약 테스트가 port method에 event type·boolean 인자가 없음을 고정한다.
+  - `HistoryMetadata`: metadata 쓰기/읽기. Raw JSON은 응답하지 않고 typed field로 투영한다.
+  - `SecurityConfiguration`의 인증 GET 목록에 history 경로를 추가했다(추가하지 않으면 deny-all로 403).
+- 버그 수정: lifecycle 여덟 command가 `statusReason`을 history `metadata.reason`에 기록하지 않던 공백을
+  고쳤다(ADR-022/ERD V8 규칙). 문자열 연결이 아니라 Jackson으로 serialize한다. 과거 행은 backfill 안 함.
+- 변경 파일: `docs/adr/ADR-028-*`, `docs/adr/README.md`, `docs/architecture/open-questions.md`,
+  `docs/product/{api-spec-v1,permission-state-matrix-v1,erd-v1}.md`, `frozen-baseline.sha256.json`,
+  `maintenance/{api,application,domain,infrastructure}`의 history 관련 파일,
+  `MaintenanceRequestLifecycleService`, `SecurityConfiguration`, 테스트(`HistoryMetadataTest`,
+  `RequestHistoryRepositoryContractTest`, `RequestHistoryIntegrationTest`, `SecurityBoundaryTest`).
+- 검증(Ubuntu, Docker Desktop): `check_repository.py` 통과, `git diff --check` 통과,
+  `./gradlew check bootJar` 통과(unit 24 suites / 131 tests), `./gradlew integrationTest` 통과
+  (25 suites / 173 tests). 이 슬라이스 전 Ubuntu 첫 전체 게이트도 통과했다.
+- 남은 작업: Notification + domain event(ADR 필요), admin users/dashboard(ADR 필요). 커밋은 아직 안 했다.
+  같은 작업 트리에 로드맵 문서 변경(`roadmap.md`, `PROJECT_CONTEXT.md`, 직전 WORKLOG 항목)도 함께 있다.
+- 주의: 새 metadata key를 쓰는 command를 추가하면 `HistoryMetadata.Projection`과 응답 DTO에 field를 더하는
+  계약 변경으로 다룬다.
+
 ## 2026-11-27 - 로드맵에 AWS 전통 배포와 서버리스 마이그레이션 계획 추가
 
 - 사용자 결정: 전체 코드리뷰는 뒤로 미루고, 남은 V1 기능 개발 → AWS 전통 배포(EC2) → 서버리스

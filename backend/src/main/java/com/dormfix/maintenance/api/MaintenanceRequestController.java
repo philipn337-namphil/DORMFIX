@@ -3,6 +3,7 @@ package com.dormfix.maintenance.api;
 import com.dormfix.maintenance.application.AssignWorkerCommand;
 import com.dormfix.maintenance.application.CreateMaintenanceRequestCommand;
 import com.dormfix.maintenance.application.LifecycleCommand;
+import com.dormfix.maintenance.application.RequestHistoryQueryService;
 import com.dormfix.maintenance.application.MaintenanceRequestAssignmentService;
 import com.dormfix.maintenance.application.MaintenanceRequestCreationService;
 import com.dormfix.maintenance.application.MaintenanceRequestLifecycleService;
@@ -55,13 +56,15 @@ public class MaintenanceRequestController {
     private final MaintenanceRequestPatchService patches;
     private final CommentService comments;
     private final AttachmentService attachments;
+    private final RequestHistoryQueryService histories;
 
     public MaintenanceRequestController(MaintenanceRequestCreationService creation,
             MaintenanceRequestQueryService queries,
             MaintenanceRequestAssignmentService assignments,
             MaintenanceRequestLifecycleService lifecycle, MaintenanceVisitService visits,
             WorkLogService workLogs, MaintenanceRequestPatchService patches,
-            CommentService comments, AttachmentService attachments) {
+            CommentService comments, AttachmentService attachments,
+            RequestHistoryQueryService histories) {
         this.creation = creation;
         this.queries = queries;
         this.assignments = assignments;
@@ -71,6 +74,7 @@ public class MaintenanceRequestController {
         this.patches = patches;
         this.comments = comments;
         this.attachments = attachments;
+        this.histories = histories;
     }
 
     @PostMapping(BASE)
@@ -311,6 +315,14 @@ public class MaintenanceRequestController {
             @AuthenticationPrincipal Jwt jwt) {
         return DownloadUrlResponse
                 .from(attachments.downloadUrl(attachmentId, id(jwt), roles(jwt)));
+    }
+
+    @GetMapping(BASE + "/{id}/history")
+    public RequestHistoryPageResponse listHistory(@PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size, @AuthenticationPrincipal Jwt jwt) {
+        return RequestHistoryPageResponse
+                .from(histories.listForRequest(id, page, size, id(jwt), roles(jwt)));
     }
 
     private LifecycleCommand command(Long id, LifecycleCommandRequest value) {

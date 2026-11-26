@@ -12,7 +12,7 @@ DormFix는 기숙사 시설 문제를 `REPORT → ASSIGN → VISIT → REPAIR �
 
 - **Phase 3 MaintenanceRequest workflow의 계약 표면이 완성되었다.** 신고 생성, 조회, 배정,
   lifecycle 전이 8개, visit, work log, metadata PATCH, comment, attachment가 구현되었고 각각 Accepted
-  ADR(ADR-019~027)과 Frozen 계약 동기화를 갖는다.
+  ADR(ADR-019~027)과 Frozen 계약 동기화를 갖는다. 2026-11-27 history 조회(ADR-028)를 추가했다.
 - Flyway migration은 V1~V13이다. 적용된 migration은 수정하지 않으며, RequestHistory event type을
   늘리는 슬라이스는 `ck_request_history_event_type`을 새 migration에서 drop 후 재생성한다.
 - `main`에는 PR #23(attachment)까지 병합되어 있다.
@@ -63,6 +63,9 @@ DormFix는 기숙사 시설 문제를 `REPORT → ASSIGN → VISIT → REPAIR �
   PATCH로 바꾸지 않는다. Category 변경은 priority를 재설정하지 않는다.
 - Comment(ADR-026): 권한은 role이 아니라 request에 대한 관계로 정한다. Resident는 `STAFF_ONLY`의
   row, 개수, 삭제 응답 어느 것으로도 그 존재를 알 수 없다.
+- History 조회(ADR-028): 가시성은 detail과 같고 밖은 `404`다. Resident view는 `COMMENT_DELETED` 행을
+  받지 않는다. Raw metadata 대신 typed field로 투영한다. Lifecycle reason은 history `metadata.reason`에
+  JSON serializer로 기록한다(이전에는 누락되던 공백).
 - Attachment(ADR-027): object key는 서버가 만들고 request와 uploader를 접두에 담는다. 등록은
   storage가 본 크기와 type을 기록한다. 한도는 설정이다. Application은 object를 삭제하지 않는다.
 
