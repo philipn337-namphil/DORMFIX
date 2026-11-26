@@ -234,6 +234,17 @@ CLOSED, REJECTED, DUPLICATE는 terminal이다. 다른 transition은 허용하지
 - 상위 비활성화는 하위로 자동 전파하지 않는다. 비활성 상위 아래의 생성과 재활성화는 허용하지 않는다.
 - 운영 데이터는 hard delete하지 않는다.
 
+## Notification 세부
+
+- Notification은 command commit 뒤 listener가 기록한다. best-effort, 최대 한 번이며 유실될 수 있고
+  재시도하지 않는다. 실패가 commit된 command를 되돌리지 않는다(ADR-029).
+- actor 자신에게는 보내지 않고, 한 event에서 수신자당 하나만 만든다. `SUPER_ADMIN`은 role만으로
+  수신자가 되지 않는다. `STAFF_ONLY` comment는 reporter에게 notification을 만들지 않는다.
+- 문구는 type별 서버 고정 문구이며 사용자 입력 텍스트를 담지 않는다.
+- 네 경로는 인증된 caller 본인의 notification만 다루며 role 제한이 없다. 남의 notification과 없는
+  id는 모두 `404 NOTIFICATION_NOT_FOUND`다. 읽음 처리는 멱등이고 첫 `readAt`을 유지한다.
+- Notification 생성·삭제 API는 없다.
+
 ## Visit과 보존
 
 VisitStatus는 SCHEDULED, COMPLETED, CANCELED, NO_ACCESS다. Request가 ASSIGNED, IN_PROGRESS, ON_HOLD일 때만 생성한다. Visit 완료는 request resolve가 아니다. 생성 시 `entry_policy`를 `entry_policy_snapshot`으로, `contact_before_entry`를 visit에 snapshot하여 이후 request 변경에도 immutable하게 보존한다. EntryPolicy는 RESIDENT_PRESENT_REQUIRED 또는 ABSENT_ENTRY_ALLOWED이며 contact_before_entry는 독립적이다.

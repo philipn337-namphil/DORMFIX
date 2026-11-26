@@ -1,5 +1,7 @@
 package com.dormfix.maintenance.application;
 
+import org.springframework.context.ApplicationEventPublisher;
+import com.dormfix.maintenance.application.event.MaintenanceEvent;
 import com.dormfix.identity.application.DormitoryScopeAccessDeniedException;
 import com.dormfix.identity.domain.Role;
 import com.dormfix.maintenance.application.RequestRelationshipResolver.RequestRelationship;
@@ -33,15 +35,20 @@ public class CommentService {
     private final RequestHistoryRepository histories;
     private final RequestRelationshipResolver relationships;
     private final Clock clock;
+    private final MaintenanceAssignmentRepository assignments;
+    private final ApplicationEventPublisher events;
 
     public CommentService(CommentRepository comments, MaintenanceRequestRepository requests,
             RequestHistoryRepository histories, RequestRelationshipResolver relationships,
-            Clock clock) {
+            Clock clock, MaintenanceAssignmentRepository assignments,
+            ApplicationEventPublisher events) {
         this.comments = comments;
         this.requests = requests;
         this.histories = histories;
         this.relationships = relationships;
         this.clock = clock;
+        this.assignments = assignments;
+        this.events = events;
     }
 
     @Transactional
@@ -71,6 +78,11 @@ public class CommentService {
         }
         Comment saved = comments.save(new Comment(request.getId(), actorId, command.content(),
                 visibility, Instant.now(clock)));
+        Long activeAssigneeId = assignments.findActiveByRequestId(request.getId())
+                .map(assignment -> assignment.getWorkerId()).orElse(null);
+        events.publishEvent(new MaintenanceEvent.CommentCreated(request.getId(),
+                request.getRequestNumber(), actorId, request.getReporterId(), saved.getId(),
+                visibility == CommentVisibility.STAFF_ONLY, activeAssigneeId));
         return result(saved);
     }
 

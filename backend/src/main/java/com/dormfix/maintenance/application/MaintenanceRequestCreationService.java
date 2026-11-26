@@ -1,5 +1,7 @@
 package com.dormfix.maintenance.application;
 
+import org.springframework.context.ApplicationEventPublisher;
+import com.dormfix.maintenance.application.event.MaintenanceEvent;
 import com.dormfix.catalog.application.FacilityRepository;
 import com.dormfix.catalog.application.MaintenanceCategoryNotFoundException;
 import com.dormfix.catalog.application.MaintenanceCategoryRepository;
@@ -42,11 +44,13 @@ public class MaintenanceRequestCreationService {
     private final FacilityRepository facilities;
     private final MaintenanceCategoryRepository categories;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     public MaintenanceRequestCreationService(MaintenanceRequestRepository requests,
             RequestHistoryRepository histories, UserRepository users, ResidenceRepository residences,
             SpaceRepository spaces, BuildingRepository buildings, DormitoryRepository dormitories,
-            FacilityRepository facilities, MaintenanceCategoryRepository categories, Clock clock) {
+            FacilityRepository facilities, MaintenanceCategoryRepository categories, Clock clock,
+            ApplicationEventPublisher events) {
         this.requests = requests;
         this.histories = histories;
         this.users = users;
@@ -57,6 +61,7 @@ public class MaintenanceRequestCreationService {
         this.facilities = facilities;
         this.categories = categories;
         this.clock = clock;
+        this.events = events;
     }
 
     @Transactional
@@ -66,7 +71,8 @@ public class MaintenanceRequestCreationService {
         validatePreferredVisitTime(command);
         users.findById(actorId).orElseThrow(() -> new UserNotFoundException(actorId));
 
-        ZoneId roomZone = validateActiveRoom(command.spaceId());
+        Room room = validateActiveRoom(command.spaceId());
+        ZoneId roomZone = room.zone();
         requireCurrentResidence(actorId, command.spaceId(), roomZone);
         var category = categories.findById(command.categoryId())
                 .orElseThrow(() -> new MaintenanceCategoryNotFoundException(command.categoryId()));
@@ -86,6 +92,8 @@ public class MaintenanceRequestCreationService {
         request = requests.saveAndFlush(request);
         histories.save(new RequestHistory(request.getId(), actorId,
                 RequestHistoryEventType.REQUEST_CREATED, null, RequestStatus.REPORTED, now));
+        events.publishEvent(new MaintenanceEvent.MaintenanceRequestCreated(request.getId(),
+                request.getRequestNumber(), actorId, actorId, room.dormitoryId()));
         return new MaintenanceRequestResult(request.getId(), request.getRequestNumber(),
                 request.getStatus().name(), request.getPriority().name(), request.getVersion());
     }
@@ -116,7 +124,7 @@ public class MaintenanceRequestCreationService {
         }
     }
 
-    private ZoneId validateActiveRoom(Long spaceId) {
+    private Room validateActiveRoom(Long spaceId) {
         var space = spaces.findById(spaceId).orElseThrow(() -> new SpaceNotFoundException(spaceId));
         if (space.getType() != SpaceType.ROOM || !space.isActive()) {
             throw new MaintenanceRequestConflictException("Space is not an active room.");
@@ -131,8 +139,10 @@ public class MaintenanceRequestCreationService {
         if (!dormitory.isActive()) {
             throw new MaintenanceRequestConflictException("Dormitory is inactive.");
         }
-        return ZoneId.of(dormitory.getTimezone());
+        return new Room(dormitory.getId(), ZoneId.of(dormitory.getTimezone()));
     }
+
+    private record Room(Long dormitoryId, ZoneId zone) { }
 
     private void validateFacility(Long facilityId, Long spaceId) {
         if (facilityId == null) {

@@ -4,6 +4,18 @@
 
 각 질문은 소유 feature slice에서 evidence와 함께 검토하고, 필요하면 proposed ADR로 올린다. 승인 전에는 기존 state, permission, ERD, API semantics를 유지한다.
 
+## Resolved Notification 계약
+
+2026-11-27 human approval으로 [ADR-029](../adr/ADR-029-notification-contract.md)의 V1 Notification
+계약을 확정했다. ERD가 "review before DDL"로 남긴 type enum, event별 수신자, 문구 규칙, 네 경로의 DTO,
+그리고 ADR-009가 출시 전 승인을 요구한 전달 허용 수준이 아래로 닫혔다.
+
+- 전달은 best-effort, 최대 한 번이다. 재시도하지 않고 실패가 command를 되돌리지 않는다.
+- actor 제외, 수신자당 하나, `SUPER_ADMIN`은 role만으로 수신자가 아니다. `STAFF_ONLY` comment는
+  reporter에게 알리지 않는다. 문구는 서버 고정 문구다.
+- 경로는 본인 notification만 다루고 남의 것은 `404 NOTIFICATION_NOT_FOUND`(새 code)다.
+- V14가 `notification` table을 만든다. `AttachmentAdded`는 consumer가 생길 때 발행한다.
+
 ## Resolved RequestHistory 조회 계약
 
 2026-11-27 human approval으로 [ADR-028](../adr/ADR-028-request-history-query-contract.md)의 V1

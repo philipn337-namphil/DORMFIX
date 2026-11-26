@@ -1,5 +1,36 @@
 # DormFix 작업 로그
 
+## 2026-11-27 - Notification과 V1 domain event 슬라이스 구현 (ADR-029)
+
+- 사용자 승인으로 ADR-029를 Accepted로 확정했다. Frozen API(notification 절, error contract에
+  `NOTIFICATION_NOT_FOUND`), permission matrix, ERD(type enum, V14 규칙)를 동기화하고 baseline hash를
+  갱신했다. `domain-events.md`는 바꾸지 않았다. ADR 색인과 `open-questions.md`에 resolved 항목을 추가했다.
+- Domain event: `maintenance.application.event.MaintenanceEvent`(sealed, frozen 이름의 record 17개).
+  생성·배정·lifecycle 8개·visit 5개·comment command가 RequestHistory 저장 직후 publish한다.
+  `AttachmentAdded`는 consumer가 없어 발행하지 않는다.
+- Notification feature: V14 `notification` table, `Notification`/`NotificationType`(한국어 고정 문구),
+  `NotificationRecipients`(수신자 표를 순수 함수로), `NotificationRecorder`(REQUIRES_NEW),
+  `NotificationEventListener`(AFTER_COMMIT, 실패는 event 이름·requestId만 WARN 후 삼킴),
+  `NotificationService`·`NotificationController`·`NotificationExceptionHandler`(fallback 포함).
+- 기타: `AdminDormitoryScopeRepository.findUserIdsByDormitoryId` 추가, `SecurityConfiguration`에 네 경로
+  인증 허용, `MaintenanceRequestCreationService.validateActiveRoom`이 dormitory id도 돌려주도록 변경,
+  lifecycle `endActiveAssignment`가 종료된 worker id를 돌려주도록 변경.
+- 발견·수정: 읽음 처리 응답의 `readAt`이 나노초라 DB(마이크로초) 재조회 값과 달랐다. 마이크로초로
+  잘라 저장해 멱등 읽음 계약을 지킨다.
+- 테스트: `NotificationRecipientsTest`, `NotificationEventListenerTest`, `NotificationTest`,
+  `NotificationIntegrationTest`(8개: 수신자, actor 제외, STAFF_ONLY 은닉, rollback 시 미생성, 저장 실패가
+  command를 깨지 않음, 본인 외 404, 멱등 읽음, read-all, 페이징). `SecurityBoundaryTest`는 새 서비스 mock과
+  notification 경로 검사를 추가했고, "계약 밖 경로는 deny-all" 검사 대상을 notification에서 status setter
+  경로(`/maintenance-requests/1/status`)와 `POST /notifications`로 옮겼다(의도 유지).
+  `FoundationIntegrationTest`의 현재 migration 버전을 13→14로 올렸다(슬라이스마다 해 온 갱신).
+- 검증(Ubuntu, Docker Desktop): `check_repository.py` 통과, `git diff --check` 통과,
+  `./gradlew check bootJar` 통과(unit 27 suites / 141 tests), `./gradlew integrationTest` 통과
+  (26 suites / 181 tests, Foundation 버전 갱신 후 해당 suite 재실행 포함).
+- 남은 작업: admin users·dashboard 조회(ADR 필요). 커밋은 아직 안 했다.
+- 주의: 새 command가 notification을 만들어야 하면 `MaintenanceEvent`에 record를 추가하고
+  `NotificationRecipients`의 switch(sealed라 컴파일러가 누락을 잡는다), `NotificationType`, V-migration의
+  `ck_notification_type`을 함께 바꾼다. 알림 문구에 사용자 입력 텍스트를 넣지 않는다.
+
 ## 2026-11-27 - RequestHistory 조회 슬라이스 구현 (ADR-028)
 
 - 사용자 승인으로 ADR-028을 Accepted로 확정했다. Frozen API, permission matrix, ERD를 동기화하고

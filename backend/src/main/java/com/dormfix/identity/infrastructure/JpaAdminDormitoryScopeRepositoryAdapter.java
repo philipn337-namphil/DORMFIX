@@ -30,6 +30,12 @@ class JpaAdminDormitoryScopeRepositoryAdapter implements AdminDormitoryScopeRepo
     }
 
     @Override
+    public List<Long> findUserIdsByDormitoryId(Long dormitoryId) {
+        return delegate.findAllByIdDormitoryIdOrderByIdUserIdAsc(dormitoryId).stream()
+                .map(AdminDormitoryScope::getUserId).toList();
+    }
+
+    @Override
     public void deleteById(AdminDormitoryScopeId id) {
         delegate.deleteById(id);
     }
