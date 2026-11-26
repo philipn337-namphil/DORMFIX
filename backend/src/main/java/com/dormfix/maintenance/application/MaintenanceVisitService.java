@@ -1,5 +1,7 @@
 package com.dormfix.maintenance.application;
 
+import org.springframework.context.ApplicationEventPublisher;
+import com.dormfix.maintenance.application.event.MaintenanceEvent;
 import com.dormfix.identity.application.AdminDormitoryScopeRepository;
 import com.dormfix.identity.application.DormitoryScopeAccessDeniedException;
 import com.dormfix.identity.domain.Role;
@@ -34,11 +36,13 @@ public class MaintenanceVisitService {
     private final AdminDormitoryScopeRepository adminScopes;
     private final DormitoryScopeResolutionService scopes;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     public MaintenanceVisitService(MaintenanceVisitRepository visits,
             MaintenanceRequestRepository requests, MaintenanceAssignmentRepository assignments,
             RequestHistoryRepository histories, AdminDormitoryScopeRepository adminScopes,
-            DormitoryScopeResolutionService scopes, Clock clock) {
+            DormitoryScopeResolutionService scopes, Clock clock,
+            ApplicationEventPublisher events) {
         this.visits = visits;
         this.requests = requests;
         this.assignments = assignments;
@@ -46,6 +50,7 @@ public class MaintenanceVisitService {
         this.adminScopes = adminScopes;
         this.scopes = scopes;
         this.clock = clock;
+        this.events = events;
     }
 
     @Transactional
@@ -78,7 +83,7 @@ public class MaintenanceVisitService {
             // ux_visit_open_request lost the race with a concurrent scheduling command.
             throw new MaintenanceRequestConflictException("The request already has an open visit.");
         }
-        audit(request, actorId, RequestHistoryEventType.VISIT_SCHEDULED, saved.getId(), now);
+        audit(request, actorId, RequestHistoryEventType.VISIT_SCHEDULED, saved, now);
         return result(saved);
     }
 
@@ -109,7 +114,7 @@ public class MaintenanceVisitService {
         MaintenanceVisit saved = visits.saveAndFlush(visit);
         if (moved) {
             // A note-only patch is not a schedule event, so it appends nothing.
-            audit(request, actorId, RequestHistoryEventType.VISIT_RESCHEDULED, saved.getId(), now);
+            audit(request, actorId, RequestHistoryEventType.VISIT_RESCHEDULED, saved, now);
         }
         return result(saved);
     }
@@ -179,7 +184,7 @@ public class MaintenanceVisitService {
         Instant now = Instant.now(clock);
         outcome.apply(visit, now);
         MaintenanceVisit saved = visits.saveAndFlush(visit);
-        audit(request, actorId, event, saved.getId(), now);
+        audit(request, actorId, event, saved, now);
         return result(saved);
     }
 
@@ -270,9 +275,30 @@ public class MaintenanceVisitService {
     }
 
     private void audit(MaintenanceRequest request, Long actorId, RequestHistoryEventType event,
-            Long visitId, Instant now) {
+            MaintenanceVisit visit, Instant now) {
         histories.save(new RequestHistory(request.getId(), actorId, event, request.getStatus(),
-                request.getStatus(), now, "{\"visitId\":" + visitId + "}"));
+                request.getStatus(), now, "{\"visitId\":" + visit.getId() + "}"));
+        events.publishEvent(visitEvent(event, request, actorId, visit));
+    }
+
+    private static MaintenanceEvent visitEvent(RequestHistoryEventType event,
+            MaintenanceRequest request, Long actorId, MaintenanceVisit visit) {
+        Long id = request.getId();
+        String number = request.getRequestNumber();
+        Long reporter = request.getReporterId();
+        return switch (event) {
+            case VISIT_SCHEDULED -> new MaintenanceEvent.MaintenanceVisitScheduled(id, number,
+                    actorId, reporter, visit.getId(), visit.getWorkerId());
+            case VISIT_RESCHEDULED -> new MaintenanceEvent.MaintenanceVisitRescheduled(id, number,
+                    actorId, reporter, visit.getId(), visit.getWorkerId());
+            case VISIT_CANCELED -> new MaintenanceEvent.MaintenanceVisitCanceled(id, number,
+                    actorId, reporter, visit.getId(), visit.getWorkerId());
+            case VISIT_COMPLETED -> new MaintenanceEvent.MaintenanceVisitCompleted(id, number,
+                    actorId, reporter, visit.getId(), visit.getWorkerId());
+            case VISIT_NO_ACCESS -> new MaintenanceEvent.MaintenanceVisitNoAccess(id, number,
+                    actorId, reporter, visit.getId(), visit.getWorkerId());
+            default -> throw new IllegalArgumentException("Not a visit event: " + event);
+        };
     }
 
     private VisitResult result(MaintenanceVisit visit) {

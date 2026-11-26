@@ -23,6 +23,7 @@ import com.dormfix.maintenance.application.MaintenanceVisitService;
 import com.dormfix.maintenance.application.WorkLogService;
 import com.dormfix.maintenance.application.MaintenanceRequestQueryService;
 import com.dormfix.maintenance.application.RequestHistoryQueryService;
+import com.dormfix.notification.application.NotificationService;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.junit.jupiter.api.Test;
@@ -85,6 +86,8 @@ class SecurityBoundaryTest {
     @MockitoBean
     private RequestHistoryQueryService requestHistoryQueryService;
     @MockitoBean
+    private NotificationService notificationService;
+    @MockitoBean
     private JwtDecoder jwtDecoder;
     @MockitoBean
     private JwtAuthenticationConverter jwtAuthenticationConverter;
@@ -107,20 +110,23 @@ class SecurityBoundaryTest {
     }
 
     /**
-     * A privileged role gains no authority over a frozen path that is not implemented yet. The
-     * lifecycle commands this test used to target are now implemented under ADR-022, so it points
-     * at the frozen paths that are still unimplemented: notifications. Every maintenance request
-     * path is implemented now, and each is covered by its own integration suite.
+     * A privileged role gains no authority over a path the contract does not define. Every frozen
+     * non-admin path is implemented now (notifications under ADR-029), so this points at paths the
+     * hard invariants forbid outright: a status setter on a request. The deny-all default must
+     * still answer them, whatever the role.
      */
     @Test
     @WithMockUser(roles = "SUPER_ADMIN")
     void skeletonNeverPretendsBusinessAuthorizationIsImplemented() throws Exception {
-        for (String unimplemented : java.util.List.of("/api/v1/notifications/read-all",
-                "/api/v1/notifications/1/read")) {
-            mvc.perform(post(unimplemented))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
-        }
+        mvc.perform(post("/api/v1/maintenance-requests/1/status"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        mvc.perform(patch("/api/v1/maintenance-requests/1/status"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        mvc.perform(post("/api/v1/notifications"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
 
     /**
@@ -144,6 +150,12 @@ class SecurityBoundaryTest {
         mvc.perform(get("/api/v1/maintenance-requests/1/history"))
                 .andExpect(result -> org.assertj.core.api.Assertions
                         .assertThat(result.getResponse().getStatus()).isNotEqualTo(403));
+        for (var call : java.util.List.of(get("/api/v1/notifications"),
+                get("/api/v1/notifications/unread-count"), patch("/api/v1/notifications/1/read"),
+                post("/api/v1/notifications/read-all"))) {
+            mvc.perform(call).andExpect(result -> org.assertj.core.api.Assertions
+                    .assertThat(result.getResponse().getStatus()).isNotEqualTo(403));
+        }
     }
 
     @Test

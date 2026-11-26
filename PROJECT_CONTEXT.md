@@ -12,15 +12,15 @@ DormFix는 기숙사 시설 문제를 `REPORT → ASSIGN → VISIT → REPAIR �
 
 - **Phase 3 MaintenanceRequest workflow의 계약 표면이 완성되었다.** 신고 생성, 조회, 배정,
   lifecycle 전이 8개, visit, work log, metadata PATCH, comment, attachment가 구현되었고 각각 Accepted
-  ADR(ADR-019~027)과 Frozen 계약 동기화를 갖는다. 2026-11-27 history 조회(ADR-028)를 추가했다.
-- Flyway migration은 V1~V13이다. 적용된 migration은 수정하지 않으며, RequestHistory event type을
+  ADR(ADR-019~027)과 Frozen 계약 동기화를 갖는다. 2026-11-27 history 조회(ADR-028)와 notification·domain event(ADR-029)를 추가했다.
+- Flyway migration은 V1~V14이다. 적용된 migration은 수정하지 않으며, RequestHistory event type을
   늘리는 슬라이스는 `ck_request_history_event_type`을 새 migration에서 drop 후 재생성한다.
 - `main`에는 PR #23(attachment)까지 병합되어 있다.
 - **Attachment는 실제 object storage에 연결되어 있지 않다.** Storage는 `AttachmentStorage` port
   뒤에 있고 기본 adapter는 닫힌 채로 실패한다. 실행 중인 application에서 presign, 등록,
   download-url은 `503 STORAGE_UNAVAILABLE`을 답한다. 계약, 인가, 검증, metadata 저장은 구현되고
   메모리 fake로 테스트된다. 실제 S3 adapter와 고아 object 정리 작업은 별도 슬라이스다.
-- 아직 구현되지 않은 frozen 범위: notification 경로 넷과 domain event side effect, 실제 S3 adapter,
+- 아직 구현되지 않은 frozen 범위: admin users·dashboard 조회(계약 미정), 실제 S3 adapter,
   배포(EC2/RDS/S3). 다음 제품 기능은 사용자의 명시적인 요청 없이는 구현하지 않는다.
 - 2026-11-27 사용자 결정: 남은 V1 기능을 마저 개발한 뒤 AWS에 전통 방식(EC2)으로 배포하고, 이어서
   서버리스로 마이그레이션한다. 순서와 범위는 `docs/development/roadmap.md`의 Phase 5~11을 따른다.
@@ -66,6 +66,10 @@ DormFix는 기숙사 시설 문제를 `REPORT → ASSIGN → VISIT → REPAIR �
 - History 조회(ADR-028): 가시성은 detail과 같고 밖은 `404`다. Resident view는 `COMMENT_DELETED` 행을
   받지 않는다. Raw metadata 대신 typed field로 투영한다. Lifecycle reason은 history `metadata.reason`에
   JSON serializer로 기록한다(이전에는 누락되던 공백).
+- Notification(ADR-029): command commit 뒤 AFTER_COMMIT listener가 REQUIRES_NEW로 기록한다.
+  best-effort·최대 한 번이며 실패가 command를 되돌리지 않는다. actor 제외, STAFF_ONLY comment는
+  reporter에게 알리지 않는다. 문구는 서버 고정 문구다. Event는 `maintenance.application.event`의
+  `MaintenanceEvent`이고 notification이 maintenance에 의존한다(반대 방향 금지).
 - Attachment(ADR-027): object key는 서버가 만들고 request와 uploader를 접두에 담는다. 등록은
   storage가 본 크기와 type을 기록한다. 한도는 설정이다. Application은 object를 삭제하지 않는다.
 

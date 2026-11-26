@@ -1,5 +1,7 @@
 package com.dormfix.maintenance.application;
 
+import org.springframework.context.ApplicationEventPublisher;
+import com.dormfix.maintenance.application.event.MaintenanceEvent;
 import com.dormfix.identity.application.AdminDormitoryScopeRepository;
 import com.dormfix.identity.application.DormitoryScopeAccessDeniedException;
 import com.dormfix.identity.domain.Role;
@@ -32,24 +34,28 @@ public class MaintenanceRequestLifecycleService {
     private final AdminDormitoryScopeRepository adminScopes;
     private final DormitoryScopeResolutionService scopes;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     public MaintenanceRequestLifecycleService(MaintenanceRequestRepository requests,
             MaintenanceAssignmentRepository assignments, RequestHistoryRepository histories,
             AdminDormitoryScopeRepository adminScopes, DormitoryScopeResolutionService scopes,
-            Clock clock) {
+            Clock clock,
+            ApplicationEventPublisher events) {
         this.requests = requests;
         this.assignments = assignments;
         this.histories = histories;
         this.adminScopes = adminScopes;
         this.scopes = scopes;
         this.clock = clock;
+        this.events = events;
     }
 
     @Transactional
     public MaintenanceRequestResult start(LifecycleCommand command, Long actorId,
             Set<String> roleNames) {
         return workerCommand(command, actorId, roleNames, RequestStatus.ASSIGNED,
-                RequestHistoryEventType.REQUEST_STARTED, MaintenanceRequest::start);
+                RequestHistoryEventType.REQUEST_STARTED, MaintenanceRequest::start,
+                MaintenanceEvent.MaintenanceStarted::new);
     }
 
     @Transactional
@@ -57,21 +63,24 @@ public class MaintenanceRequestLifecycleService {
             Set<String> roleNames) {
         requireReason(command);
         return workerCommand(command, actorId, roleNames, RequestStatus.IN_PROGRESS,
-                RequestHistoryEventType.REQUEST_HELD, MaintenanceRequest::hold);
+                RequestHistoryEventType.REQUEST_HELD, MaintenanceRequest::hold,
+                MaintenanceEvent.MaintenanceHeld::new);
     }
 
     @Transactional
     public MaintenanceRequestResult resume(LifecycleCommand command, Long actorId,
             Set<String> roleNames) {
         return workerCommand(command, actorId, roleNames, RequestStatus.ON_HOLD,
-                RequestHistoryEventType.REQUEST_RESUMED, MaintenanceRequest::resume);
+                RequestHistoryEventType.REQUEST_RESUMED, MaintenanceRequest::resume,
+                MaintenanceEvent.MaintenanceResumed::new);
     }
 
     @Transactional
     public MaintenanceRequestResult resolve(LifecycleCommand command, Long actorId,
             Set<String> roleNames) {
         return workerCommand(command, actorId, roleNames, RequestStatus.IN_PROGRESS,
-                RequestHistoryEventType.REQUEST_RESOLVED, MaintenanceRequest::resolve);
+                RequestHistoryEventType.REQUEST_RESOLVED, MaintenanceRequest::resolve,
+                MaintenanceEvent.MaintenanceResolved::new);
     }
 
     @Transactional
@@ -81,9 +90,11 @@ public class MaintenanceRequestLifecycleService {
                 RequestStatus.RESOLVED);
         Instant now = Instant.now(clock);
         RequestStatus previous = request.close(now, command.statusReason());
-        endActiveAssignment(request, actorId, now);
+        Long endedWorkerId = endActiveAssignment(request, actorId, now);
         return commit(request, actorId, RequestHistoryEventType.REQUEST_CLOSED, previous, now,
-                HistoryMetadata.lifecycle(command.statusReason()));
+                HistoryMetadata.lifecycle(command.statusReason()),
+                new MaintenanceEvent.MaintenanceClosed(request.getId(), request.getRequestNumber(),
+                        actorId, request.getReporterId(), endedWorkerId));
     }
 
     @Transactional
@@ -91,7 +102,9 @@ public class MaintenanceRequestLifecycleService {
             Set<String> roleNames) {
         MaintenanceRequest request = load(command, actorId, roleNames, Authority.REPORTER_OR_ADMIN,
                 RequestStatus.RESOLVED);
-        if (assignments.findActiveByRequestId(request.getId()).isEmpty()) {
+        Long workerId = assignments.findActiveByRequestId(request.getId())
+                .map(assignment -> assignment.getWorkerId()).orElse(null);
+        if (workerId == null) {
             // IN_PROGRESS with nobody assigned would contradict the matrix rule that only the
             // current active worker may act, so an administrator assigns before reopening.
             throw new MaintenanceRequestConflictException(
@@ -100,7 +113,9 @@ public class MaintenanceRequestLifecycleService {
         Instant now = Instant.now(clock);
         RequestStatus previous = request.reopen(now, command.statusReason());
         return commit(request, actorId, RequestHistoryEventType.REQUEST_REOPENED, previous, now,
-                HistoryMetadata.lifecycle(command.statusReason()));
+                HistoryMetadata.lifecycle(command.statusReason()),
+                new MaintenanceEvent.MaintenanceReopened(request.getId(), request.getRequestNumber(),
+                        actorId, request.getReporterId(), workerId));
     }
 
     @Transactional
@@ -113,7 +128,8 @@ public class MaintenanceRequestLifecycleService {
         RequestStatus previous = request.reject(now, command.statusReason());
         endActiveAssignment(request, actorId, now);
         return commit(request, actorId, RequestHistoryEventType.REQUEST_REJECTED, previous, now,
-                HistoryMetadata.lifecycle(command.statusReason()));
+                HistoryMetadata.lifecycle(command.statusReason()),
+                common(MaintenanceEvent.MaintenanceRejected::new, request, actorId));
     }
 
     @Transactional
@@ -131,7 +147,8 @@ public class MaintenanceRequestLifecycleService {
                 command.statusReason());
         endActiveAssignment(request, actorId, now);
         return commit(request, actorId, RequestHistoryEventType.REQUEST_MARKED_DUPLICATE, previous,
-                now, HistoryMetadata.duplicate(command.duplicateOfId(), command.statusReason()));
+                now, HistoryMetadata.duplicate(command.duplicateOfId(), command.statusReason()),
+                common(MaintenanceEvent.MaintenanceMarkedDuplicate::new, request, actorId));
     }
 
     /**
@@ -140,13 +157,14 @@ public class MaintenanceRequestLifecycleService {
      */
     private MaintenanceRequestResult workerCommand(LifecycleCommand command, Long actorId,
             Set<String> roleNames, RequestStatus expected, RequestHistoryEventType event,
-            Transition transition) {
+            Transition transition, MaintenanceEvent.Factory published) {
         MaintenanceRequest request =
                 load(command, actorId, roleNames, Authority.CURRENT_WORKER, expected);
         Instant now = Instant.now(clock);
         RequestStatus previous = transition.apply(request, now, command.statusReason());
         return commit(request, actorId, event, previous, now,
-                HistoryMetadata.lifecycle(command.statusReason()));
+                HistoryMetadata.lifecycle(command.statusReason()),
+                common(published, request, actorId));
     }
 
     private void requireReason(LifecycleCommand command) {
@@ -244,15 +262,24 @@ public class MaintenanceRequestLifecycleService {
                 .contains(scopes.resolveDormitoryIdForSpace(request.getSpaceId()));
     }
 
-    private void endActiveAssignment(MaintenanceRequest request, Long actorId, Instant now) {
-        assignments.findActiveByRequestId(request.getId()).ifPresent(assignment -> {
+    /** Ends the active assignment if there is one and returns its worker, or null. */
+    private Long endActiveAssignment(MaintenanceRequest request, Long actorId, Instant now) {
+        return assignments.findActiveByRequestId(request.getId()).map(assignment -> {
             assignment.end(actorId, now);
             assignments.saveAndFlush(assignment);
-        });
+            return assignment.getWorkerId();
+        }).orElse(null);
+    }
+
+    private static MaintenanceEvent common(MaintenanceEvent.Factory factory,
+            MaintenanceRequest request, Long actorId) {
+        return factory.create(request.getId(), request.getRequestNumber(), actorId,
+                request.getReporterId());
     }
 
     private MaintenanceRequestResult commit(MaintenanceRequest request, Long actorId,
-            RequestHistoryEventType event, RequestStatus previous, Instant now, String metadata) {
+            RequestHistoryEventType event, RequestStatus previous, Instant now, String metadata,
+            MaintenanceEvent published) {
         MaintenanceRequest saved;
         try {
             saved = requests.saveAndFlush(request);
@@ -261,6 +288,7 @@ public class MaintenanceRequestLifecycleService {
         }
         histories.save(new RequestHistory(saved.getId(), actorId, event, previous,
                 saved.getStatus(), now, metadata));
+        events.publishEvent(published);
         return new MaintenanceRequestResult(saved.getId(), saved.getRequestNumber(),
                 saved.getStatus().name(), saved.getPriority().name(), saved.getVersion());
     }

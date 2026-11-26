@@ -64,6 +64,12 @@ public class SecurityConfiguration {
                                 "/api/v1/attachments/*/download-url")
                         .authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/comments/*").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/notifications",
+                                "/api/v1/notifications/unread-count").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/notifications/*/read")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/notifications/read-all")
+                        .authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/visits/*",
                                 "/api/v1/maintenance-requests/*")
                         .authenticated()

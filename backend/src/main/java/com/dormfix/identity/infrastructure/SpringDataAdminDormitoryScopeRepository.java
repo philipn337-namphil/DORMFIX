@@ -8,4 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 interface SpringDataAdminDormitoryScopeRepository
         extends JpaRepository<AdminDormitoryScope, AdminDormitoryScopeId> {
     List<AdminDormitoryScope> findAllByIdUserIdOrderByIdDormitoryIdAsc(Long userId);
+
+    List<AdminDormitoryScope> findAllByIdDormitoryIdOrderByIdUserIdAsc(Long dormitoryId);
 }

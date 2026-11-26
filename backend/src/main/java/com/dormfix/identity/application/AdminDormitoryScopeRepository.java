@@ -11,5 +11,8 @@ public interface AdminDormitoryScopeRepository {
 
     List<AdminDormitoryScope> findAllByUserId(Long userId);
 
+    /** Administrators scoped to the dormitory, ordered by user id. */
+    List<Long> findUserIdsByDormitoryId(Long dormitoryId);
+
     void deleteById(AdminDormitoryScopeId id);
 }

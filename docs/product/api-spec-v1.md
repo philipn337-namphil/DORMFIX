@@ -443,6 +443,49 @@ that reconciles bucket keys against registered `object_key` values, and the appl
 deletes an object in V1. There is no attachment delete path and attachment rows are never hard
 deleted.
 
+### Notifications
+
+Notifications are written by in-process listeners that run after the business command commits
+(ADR-029). Delivery is best effort and at most once: a crash after commit or a failing listener can
+lose a notification, nothing is retried, and the committed command is never rolled back. The
+authoritative audit is RequestHistory, so a client must not treat notifications as the source of
+truth. The actor of a command never receives a notification for it, one event produces at most one
+notification per recipient, and `SUPER_ADMIN` is never selected as a recipient by role alone.
+
+| Event | Recipients and `type` |
+|---|---|
+| MaintenanceRequestCreated | every `ADMIN` scoped to the request's dormitory: `REQUEST_SUBMITTED` |
+| MaintenanceRequestAssigned | assigned worker: `ASSIGNED_TO_YOU`; reporter: `REQUEST_ASSIGNED` |
+| MaintenanceRequestReassigned | new worker: `ASSIGNED_TO_YOU`; previous worker: `UNASSIGNED_FROM_YOU`; reporter: `REQUEST_ASSIGNED` |
+| MaintenanceStarted / Held / Resumed / Resolved / Rejected / MarkedDuplicate | reporter: `REQUEST_STARTED` / `REQUEST_HELD` / `REQUEST_RESUMED` / `REQUEST_RESOLVED` / `REQUEST_REJECTED` / `REQUEST_MARKED_DUPLICATE` |
+| MaintenanceClosed | the worker whose assignment the close ended, and the reporter: `REQUEST_CLOSED` |
+| MaintenanceReopened | active assignee: `REQUEST_REOPENED` |
+| MaintenanceVisitScheduled / Rescheduled / Canceled | reporter and the visit worker: `VISIT_SCHEDULED` / `VISIT_RESCHEDULED` / `VISIT_CANCELED` |
+| MaintenanceVisitCompleted / NoAccess | reporter: `VISIT_COMPLETED` / `VISIT_NO_ACCESS` |
+| CommentCreated | `PUBLIC`: reporter and active assignee; `STAFF_ONLY`: active assignee only: `COMMENT_ADDED` |
+
+`AttachmentAdded` produces no notification and is not published until a consumer exists. A
+`STAFF_ONLY` comment never produces a notification for the reporter. `title` and `message` are
+fixed server-side Korean templates per `type` with only the `requestNumber` substituted; they never
+contain user-entered text such as a request title or description, a lifecycle reason, comment
+content, a visit note or entry-consent data.
+
+Every path acts on the authenticated caller's own notifications only and has no role restriction.
+
+- `GET /notifications?unread=&page=&size=` returns `NotificationPageResponse(content, page, size,
+  totalElements, totalPages)`. `unread=true` selects unread rows only. Order is fixed at
+  `createdAt DESC, id DESC`; `page` is zero-based with default `0` and `size` is `1..100` with
+  default `20`, and a violation is `400 VALIDATION_FAILED`.
+- The item DTO is `NotificationResponse(id, type, requestId, title, message, read, readAt,
+  createdAt)`; the recipient is always the caller and is not returned.
+- `PATCH /notifications/{id}/read` takes no body and returns `NotificationResponse`. It is
+  idempotent: an already read notification keeps its first `readAt`. A notification of another
+  user and a missing id both answer `404 NOTIFICATION_NOT_FOUND`.
+- `POST /notifications/read-all` marks every unread notification of the caller read and returns
+  `204 No Content`.
+- `GET /notifications/unread-count` returns `UnreadCountResponse(count)`.
+- There is no path that creates or deletes a notification.
+
 ### Structure administration
 
 All structure-management paths use the `/admin` prefix. These endpoints are part of the frozen contract but are not implemented yet.
@@ -500,7 +543,7 @@ Authorize request -> server issues S3 presigned upload URL -> client uploads dir
 | 400 | Input validation | INVALID_VISIT_TIME, INVALID_ENTRY_POLICY, INVALID_FILE_TYPE, FILE_TOO_LARGE |
 | 401 | Authentication missing/invalid | AUTHENTICATION_REQUIRED |
 | 403 | Authenticated but wrong role/ownership/current assignment | ACCESS_DENIED, WORKER_NOT_ASSIGNED |
-| 404 | Resource does not exist | USER_NOT_FOUND, SPACE_NOT_FOUND, FACILITY_NOT_FOUND, REQUEST_NOT_FOUND, WORKER_NOT_FOUND, VISIT_NOT_FOUND, COMMENT_NOT_FOUND, ATTACHMENT_NOT_FOUND |
+| 404 | Resource does not exist | USER_NOT_FOUND, SPACE_NOT_FOUND, FACILITY_NOT_FOUND, REQUEST_NOT_FOUND, WORKER_NOT_FOUND, VISIT_NOT_FOUND, COMMENT_NOT_FOUND, ATTACHMENT_NOT_FOUND, NOTIFICATION_NOT_FOUND |
 | 409 | Business state/concurrency conflict | INVALID_REQUEST_STATE, REQUEST_ALREADY_ASSIGNED, INVALID_FACILITY_STATE, VERSION_CONFLICT |
 
 INVALID_WORKER is also a representative frozen code; exact validation-vs-business-conflict mapping must be specified by assignment API review. Do not map every integrity constraint error to VERSION_CONFLICT.

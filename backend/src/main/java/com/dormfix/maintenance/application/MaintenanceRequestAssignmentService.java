@@ -1,5 +1,7 @@
 package com.dormfix.maintenance.application;
 
+import org.springframework.context.ApplicationEventPublisher;
+import com.dormfix.maintenance.application.event.MaintenanceEvent;
 import com.dormfix.identity.application.DormitoryScopeAccessDeniedException;
 import com.dormfix.identity.application.UserRepository;
 import com.dormfix.identity.domain.Role;
@@ -34,16 +36,19 @@ public class MaintenanceRequestAssignmentService {
     private final UserRepository users;
     private final DormitoryScopeResolutionService scopes;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     public MaintenanceRequestAssignmentService(MaintenanceRequestRepository requests,
             MaintenanceAssignmentRepository assignments, RequestHistoryRepository histories,
-            UserRepository users, DormitoryScopeResolutionService scopes, Clock clock) {
+            UserRepository users, DormitoryScopeResolutionService scopes, Clock clock,
+            ApplicationEventPublisher events) {
         this.requests = requests;
         this.assignments = assignments;
         this.histories = histories;
         this.users = users;
         this.scopes = scopes;
         this.clock = clock;
+        this.events = events;
     }
 
     @Transactional
@@ -107,6 +112,13 @@ public class MaintenanceRequestAssignmentService {
                         : RequestHistoryEventType.REQUEST_ASSIGNED,
                 previousStatus, RequestStatus.ASSIGNED, now,
                 metadata(command.workerId(), previousWorkerId)));
+        events.publishEvent(reassignment
+                ? new MaintenanceEvent.MaintenanceRequestReassigned(request.getId(),
+                        request.getRequestNumber(), actorId, request.getReporterId(),
+                        command.workerId(), previousWorkerId)
+                : new MaintenanceEvent.MaintenanceRequestAssigned(request.getId(),
+                        request.getRequestNumber(), actorId, request.getReporterId(),
+                        command.workerId()));
 
         return new MaintenanceRequestResult(request.getId(), request.getRequestNumber(),
                 request.getStatus().name(), request.getPriority().name(), request.getVersion());
