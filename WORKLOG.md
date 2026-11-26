@@ -1,5 +1,17 @@
 # DormFix 작업 로그
 
+## 2026-11-27 - 메인 README 전면 개편
+
+- 사용자 요청으로 `README.md`를 다시 썼다. "foundation만 담는다", "`/me`는 401" 같은 오래된 설명을 걷어내고,
+  개발 → 컨테이너화 → EC2 전통 배포 → AWS 연동·운영 → 서버리스 마이그레이션을 한 프로젝트에서 익히는
+  목표, Phase 진행 현황, 상태 기계(mermaid), 역할별 권한 요약, 구현 기능, 기술 스택, 아키텍처 원칙,
+  작업 방식(Frozen 계약, ADR, vertical slice, 품질 게이트), 로컬 실행·검증, 저장소 구조, 보안 원칙을 담았다.
+- 브랜치: `docs/readme-overview`는 아직 병합되지 않은 `feature/notifications`(PR #28) 위에 쌓았다. README가
+  알림 기능을 완료로 적기 때문이다. PR #28 병합 뒤에 이 브랜치의 PR을 올린다.
+- 검증: `python3 scripts/check_repository.py`(링크 포함) 통과, `git diff --check` 통과. 코드 변경이 없어 Gradle
+  게이트는 돌리지 않았다.
+- 주의: Phase 진행 현황 표는 `docs/development/roadmap.md`와 함께 갱신한다.
+
 ## 2026-11-27 - Notification과 V1 domain event 슬라이스 구현 (ADR-029)
 
 - 사용자 승인으로 ADR-029를 Accepted로 확정했다. Frozen API(notification 절, error contract에
