@@ -175,7 +175,18 @@ CLOSED, REJECTED, DUPLICATE는 terminal이다. 다른 transition은 허용하지
   state 전이, 해당되는 경우의 assignment 종료, reason/timestamp 기록, RequestHistory 한 행을 수행한다.
 - 8개 command는 `REQUEST_STARTED`, `REQUEST_HELD`, `REQUEST_RESUMED`, `REQUEST_RESOLVED`,
   `REQUEST_CLOSED`, `REQUEST_REOPENED`, `REQUEST_REJECTED`, `REQUEST_MARKED_DUPLICATE`를 남기고
-  duplicate 행은 `metadata`에 `duplicateOfId`를 담는다.
+  duplicate 행은 `metadata`에 `duplicateOfId`를 담는다. Command가 `statusReason`을 담으면 행의
+  `metadata`에 `reason`도 기록한다. 이 규칙 이전에 기록된 행은 backfill하지 않는다.
+
+## RequestHistory 조회 세부
+
+- `GET /maintenance-requests/{id}/history`는 request read 가시성을 재사용한다. 가시성 밖은
+  `404 REQUEST_NOT_FOUND`다.
+- staff 관계(`SUPER_ADMIN`, scope 안의 `ADMIN`, 그 request의 assignment row를 가진 `WORKER`)를 가진
+  reader는 모든 행을 받는다. 그 외의 reader인 reporter `RESIDENT`는 `COMMENT_DELETED` 행을 받지
+  않으며 `totalElements`와 `totalPages`도 같은 기준으로 센다. 두 관계를 모두 가지면 staff view다.
+- 목록은 `createdAt ASC, id ASC` 정렬이고 0-based `page`와 `1..100` `size`(default 20)로 페이징한다.
+- Raw `metadata`는 응답하지 않고 정해진 typed field로만 투영한다.
 
 ## MaintenanceRequest 배정 오류 매핑
 

@@ -82,7 +82,8 @@ public class MaintenanceRequestLifecycleService {
         Instant now = Instant.now(clock);
         RequestStatus previous = request.close(now, command.statusReason());
         endActiveAssignment(request, actorId, now);
-        return commit(request, actorId, RequestHistoryEventType.REQUEST_CLOSED, previous, now, null);
+        return commit(request, actorId, RequestHistoryEventType.REQUEST_CLOSED, previous, now,
+                HistoryMetadata.lifecycle(command.statusReason()));
     }
 
     @Transactional
@@ -99,7 +100,7 @@ public class MaintenanceRequestLifecycleService {
         Instant now = Instant.now(clock);
         RequestStatus previous = request.reopen(now, command.statusReason());
         return commit(request, actorId, RequestHistoryEventType.REQUEST_REOPENED, previous, now,
-                null);
+                HistoryMetadata.lifecycle(command.statusReason()));
     }
 
     @Transactional
@@ -112,7 +113,7 @@ public class MaintenanceRequestLifecycleService {
         RequestStatus previous = request.reject(now, command.statusReason());
         endActiveAssignment(request, actorId, now);
         return commit(request, actorId, RequestHistoryEventType.REQUEST_REJECTED, previous, now,
-                null);
+                HistoryMetadata.lifecycle(command.statusReason()));
     }
 
     @Transactional
@@ -130,7 +131,7 @@ public class MaintenanceRequestLifecycleService {
                 command.statusReason());
         endActiveAssignment(request, actorId, now);
         return commit(request, actorId, RequestHistoryEventType.REQUEST_MARKED_DUPLICATE, previous,
-                now, "{\"duplicateOfId\":" + command.duplicateOfId() + "}");
+                now, HistoryMetadata.duplicate(command.duplicateOfId(), command.statusReason()));
     }
 
     /**
@@ -144,7 +145,8 @@ public class MaintenanceRequestLifecycleService {
                 load(command, actorId, roleNames, Authority.CURRENT_WORKER, expected);
         Instant now = Instant.now(clock);
         RequestStatus previous = transition.apply(request, now, command.statusReason());
-        return commit(request, actorId, event, previous, now, null);
+        return commit(request, actorId, event, previous, now,
+                HistoryMetadata.lifecycle(command.statusReason()));
     }
 
     private void requireReason(LifecycleCommand command) {

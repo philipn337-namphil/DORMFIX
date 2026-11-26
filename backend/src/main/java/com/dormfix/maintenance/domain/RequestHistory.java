@@ -48,6 +48,8 @@ public class RequestHistory {
         this.metadata = metadata;
     }
 
+    public Long getId() { return id; }
+
     public Long getRequestId() { return requestId; }
 
     public Long getActorId() { return actorId; }

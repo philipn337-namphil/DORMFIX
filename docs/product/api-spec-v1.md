@@ -193,7 +193,9 @@ One transaction performs the state change, the terminal assignment end where it 
 and timestamp writes, and exactly one RequestHistory row. The eight commands append
 `REQUEST_STARTED`, `REQUEST_HELD`, `REQUEST_RESUMED`, `REQUEST_RESOLVED`, `REQUEST_CLOSED`,
 `REQUEST_REOPENED`, `REQUEST_REJECTED` and `REQUEST_MARKED_DUPLICATE`, and the duplicate row carries
-`{"duplicateOfId": <id>}` in `metadata`.
+`{"duplicateOfId": <id>}` in `metadata`. When the command carries a `statusReason`, the row's
+`metadata` also carries `{"reason": "<text>"}`, serialized as JSON rather than concatenated; without
+one the key is absent. Rows written before this rule have no reason and are not backfilled.
 
 ### Maintenance visits
 
@@ -364,6 +366,26 @@ A comment the caller cannot read answers `404 COMMENT_NOT_FOUND` on delete: a mi
 already deleted one, one on a request outside visibility, and a `STAFF_ONLY` comment named by a
 resident are indistinguishable, so the path does not disclose internal remarks. A comment the
 caller can read but may not delete is `403 ACCESS_DENIED`. There is no comment update path.
+
+### Maintenance request history
+
+`GET /maintenance-requests/{id}/history?page=&size=` reuses the request read visibility: the
+reporter `RESIDENT`, a `WORKER` with any assignment row for the request, current or ended, a scoped
+`ADMIN`, and a `SUPER_ADMIN`. A request outside visibility answers `404 REQUEST_NOT_FOUND`,
+identical to a missing one. A reader with a staff relationship receives every row. Any other
+reader, which is the reporter `RESIDENT`, never receives `COMMENT_DELETED` rows, because their
+`commentId` would disclose the deletion of a `STAFF_ONLY` comment; the filter is applied in the
+query, so `totalElements` and `totalPages` count the same rows. A caller holding both
+relationships receives the staff view.
+
+The list returns `RequestHistoryPageResponse(content, page, size, totalElements, totalPages)`
+ordered `createdAt ASC, id ASC`; `page` is zero-based with default `0` and `size` is `1..100` with
+default `20`, and a violation is `400 VALIDATION_FAILED`. The item DTO is
+`RequestHistoryEntryResponse(id, eventType, actorId, previousStatus, newStatus, reason, workerId,
+previousWorkerId, visitId, duplicateOfId, changedFields, commentId, createdAt)`. The raw `metadata`
+JSON is never returned; its known keys are projected into the typed fields, and a field the event
+does not carry is `null`, including `changedFields`. `actorId` may be `null` for a system action. A
+new metadata key is a contract change that adds a field here.
 
 ### Maintenance request attachments
 
