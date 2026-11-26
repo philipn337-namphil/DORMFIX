@@ -1,5 +1,18 @@
 # DormFix 작업 로그
 
+## 2026-11-27 - 로드맵에 AWS 전통 배포와 서버리스 마이그레이션 계획 추가
+
+- 사용자 결정: 전체 코드리뷰는 뒤로 미루고, 남은 V1 기능 개발 → AWS 전통 배포(EC2) → 서버리스
+  마이그레이션 순서로 진행한다.
+- 변경 파일: `docs/development/roadmap.md`(진행 현황 표, Phase 5 남은 범위, Phase 7~10 구체화,
+  Phase 11 서버리스 마이그레이션 신설), `PROJECT_CONTEXT.md`(PR #23 병합 반영, 방향 전환 기록).
+- 남은 V1 범위(Frozen API와 구현 대조): `GET /maintenance-requests/{id}/history`, notification 경로 넷과
+  AFTER_COMMIT side effect, admin `GET users`·`GET dashboard summary`(DTO 미정, ADR 필요), 실제 S3 adapter.
+- 검증: `python3 scripts/check_repository.py` 통과, `git diff --check` 통과. 코드 변경이 없어 Gradle
+  게이트는 돌리지 않았다. Ubuntu에서 `integrationTest`는 아직 한 번도 실행하지 않았다.
+- 주의: Phase 11은 ADR-010(첫 배포 EC2)·ADR-009(V1 SQS 없음) 이후 단계이므로 착수 전 Proposed ADR과
+  승인이 필요하다. 실제 AWS provisioning은 각 phase에서 사용자의 명시적 승인 후에만 한다.
+
 ## 2026-11-10 - Attachment 슬라이스 구현, Phase 3 계약 표면 완성
 
 - 브랜치: `feature/maintenance-attachment`를 `feature/maintenance-comment` 위에 스택했다. V13이 V12
