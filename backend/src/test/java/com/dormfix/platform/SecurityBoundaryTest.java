@@ -24,6 +24,8 @@ import com.dormfix.maintenance.application.WorkLogService;
 import com.dormfix.maintenance.application.MaintenanceRequestQueryService;
 import com.dormfix.maintenance.application.RequestHistoryQueryService;
 import com.dormfix.notification.application.NotificationService;
+import com.dormfix.identity.application.AdminUserQueryService;
+import com.dormfix.maintenance.application.DashboardService;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.junit.jupiter.api.Test;
@@ -87,6 +89,10 @@ class SecurityBoundaryTest {
     private RequestHistoryQueryService requestHistoryQueryService;
     @MockitoBean
     private NotificationService notificationService;
+    @MockitoBean
+    private AdminUserQueryService adminUserQueryService;
+    @MockitoBean
+    private DashboardService dashboardService;
     @MockitoBean
     private JwtDecoder jwtDecoder;
     @MockitoBean
