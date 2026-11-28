@@ -28,8 +28,8 @@ FROZEN = (
     "docs/architecture/aggregate-boundaries.md", "docs/architecture/transaction-boundaries.md",
     "docs/architecture/domain-events.md",
 )
-WRAPPER_SHA256 = "7d3a4ac4de1c32b59bc6a4eb8ecb8e612ccd0cf1ae1e99f66902da64df296172"
-DISTRIBUTION_SHA256 = "bd71102213493060956ec229d946beee57158dbd89d0e62b91bca0fa2c5f3531"
+WRAPPER_SHA256 = "621008afc4f5d59357fcf06ffa644dd5aade5e091bdc363742710445f73cdaf8"
+DISTRIBUTION_SHA256 = "971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b"
 
 
 def text_hash(path):
@@ -70,13 +70,13 @@ def check(root=ROOT):
 
     wrapper = root / "backend/gradle/wrapper/gradle-wrapper.jar"
     if wrapper.is_file() and hashlib.sha256(wrapper.read_bytes()).hexdigest() != WRAPPER_SHA256:
-        errors.append("Gradle wrapper JAR differs from the verified Gradle 8.14.3 publisher checksum")
+        errors.append("Gradle wrapper JAR differs from the verified Gradle 9.9.2 publisher checksum")
     properties = root / "backend/gradle/wrapper/gradle-wrapper.properties"
     if properties.is_file():
         content = properties.read_text(encoding="utf-8")
         if f"distributionSha256Sum={DISTRIBUTION_SHA256}" not in content:
             errors.append("Gradle distribution checksum missing or changed; review the wrapper upgrade")
-        if "gradle-8.14.3-bin.zip" not in content or "validateDistributionUrl=true" not in content:
+        if "gradle-9.9.2-bin.zip" not in content or "validateDistributionUrl=true" not in content:
             errors.append("Gradle wrapper version/URL validation differs from baseline")
 
     resources = root / "backend/src/main/resources"
