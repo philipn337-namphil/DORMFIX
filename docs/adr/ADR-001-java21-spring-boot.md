@@ -12,6 +12,8 @@ Date: 2026-09-10
 
 Java 21과 Spring Boot 3.5.16을 Gradle 8.14.3과 함께 사용한다. Wrapper를 고정하고 배포본의 SHA-256을 검증한다. 의존성 버전을 맞추기 위해 Boot BOM을 사용한다.
 
+**2026-11-28 갱신(사용자 승인):** Gradle wrapper를 9.9.2로 올렸다. Wrapper JAR과 배포본 SHA-256을 Gradle publisher checksum endpoint 값과 대조해 `scripts/check_repository.py`의 고정값을 갱신하고, 전체 품질 게이트와 Docker image build로 검증했다. Java 21과 Spring Boot 3.5.16 결정은 그대로다. Spring Boot 4.x 업그레이드는 Jackson 3·Spring Framework 7·Hibernate 7을 함께 바꾸는 기준선 변경이라 별도 ADR 없이 받지 않는다(Dependabot PR #31을 닫고 메이저 버전을 ignore했다).
+
 ## Alternatives / 대안
 
 Boot 4.x는 업그레이드 선택지이지만 foundation에 필요하지는 않다. 순수 servlet stack은 통합 작업이 더 많이 들고, Java가 아닌 backend는 이 baseline과 충돌한다.

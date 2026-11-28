@@ -1,5 +1,31 @@
 # DormFix 작업 로그
 
+## 2026-11-28 - Gradle wrapper 9.9.2 검증·적용, Spring Boot 4 Dependabot PR 정리
+
+- Dependabot PR #31(Spring Boot 3.5.16 → 4.2.0)은 Jackson 3 패키지 변경으로 컴파일이 깨지고 Spring
+  Framework 7·Hibernate 7까지 바뀌는 기준선 변경(ADR-001)이라 닫고 `@dependabot ignore this major version`을
+  남겼다. Boot 4 이전이 필요하면 ADR을 거쳐 별도 단계로 한다.
+- Dependabot PR #30(Gradle wrapper 8.14.3 → 9.9.2)은 저장소 검사가 고정 체크섬으로 막은 것이었다.
+  `chore/gradle-9-wrapper`에서 검증했다.
+  - wrapper JAR SHA-256 `621008af…`과 배포본 SHA-256 `971fcd71…`을 services.gradle.org의 공식 `.sha256`
+    값과 대조해 일치를 확인했다.
+  - Dependabot이 `gradlew.bat`을 CRLF로 커밋해 전체 줄이 바뀐 것처럼 보였다. `.gitattributes`대로 LF로
+    정규화해 실제 내용 변경만 남겼다.
+  - `scripts/check_repository.py`의 고정값과 메시지, `scripts/README.md`, `local-development.md`를 9.9.2로
+    갱신하고 ADR-001에 갱신 기록을 덧붙였다.
+- 검증(Ubuntu, Docker Desktop, Gradle 9.9.2 / JDK 21): `check_repository.py`와 guard 회귀 테스트 통과,
+  `./gradlew check bootJar --rerun-tasks` 통과(unit 30 suites / 152 tests),
+  `./gradlew integrationTest --rerun-tasks` 통과(28 suites / 190 tests), `docker build backend` 통과.
+- 주의: `--warning-mode all`에서 `Configuration.setVisible(boolean)` deprecation 1건이 나온다. 출처는 Spring
+  Boot Gradle plugin 3.5.x(`JavaPluginAction`)이고 Gradle 11에서 제거 예정이다. 우리 build script 문제가 아니며
+  Gradle 11 전에 Boot 쪽 갱신을 확인한다.
+- 사용자 요청으로 `.github/dependabot.yml`을 정리했다. Gradle 생태계는 `org.springframework.boot*` 메이저를
+  무시하고 minor·patch를 한 PR로 묶는다. GitHub Actions는 전부 한 그룹으로 묶는다. Docker는
+  `eclipse-temurin` 메이저(Java 21 고정, ADR-001)를 무시한다. 생태계별 열린 PR 수를 3/3/2로 제한했다.
+  Gradle wrapper 메이저는 막지 않는다(검사 스크립트가 고정 체크섬으로 사람 검토를 강제하므로 알림 역할).
+- 검증: YAML 파싱 확인, `check_repository.py`와 guard 회귀 테스트 통과. Dependabot 설정 자체는 GitHub에
+  병합된 뒤에만 실제로 적용된다.
+
 ## 2026-11-28 - 관리자 사용자 조회·대시보드 슬라이스 구현 (ADR-030, 첫 TDD 슬라이스)
 
 - 사용자 승인으로 ADR-030을 Accepted로 확정했다. Frozen API(두 경로 절, error contract에
