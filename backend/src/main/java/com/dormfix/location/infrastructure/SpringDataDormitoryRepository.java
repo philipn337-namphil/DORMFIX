@@ -4,9 +4,13 @@ import com.dormfix.location.domain.Dormitory;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 interface SpringDataDormitoryRepository extends JpaRepository<Dormitory, Long> {
     Optional<Dormitory> findById(Long id);
 
     List<Dormitory> findAllByActiveTrueOrderByNameAsc();
+
+    @Query("select d.id from Dormitory d")
+    List<Long> findAllIds();
 }

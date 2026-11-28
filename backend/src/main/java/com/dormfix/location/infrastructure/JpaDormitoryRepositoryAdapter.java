@@ -4,6 +4,7 @@ import com.dormfix.location.application.DormitoryRepository;
 import com.dormfix.location.domain.Dormitory;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -27,5 +28,10 @@ class JpaDormitoryRepositoryAdapter implements DormitoryRepository {
     @Override
     public List<Dormitory> findAllByActiveTrueOrderByNameAsc() {
         return delegate.findAllByActiveTrueOrderByNameAsc();
+    }
+
+    @Override
+    public Set<Long> findAllIds() {
+        return Set.copyOf(delegate.findAllIds());
     }
 }

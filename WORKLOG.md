@@ -1,5 +1,30 @@
 # DormFix 작업 로그
 
+## 2026-11-28 - 관리자 사용자 조회·대시보드 슬라이스 구현 (ADR-030, 첫 TDD 슬라이스)
+
+- 사용자 승인으로 ADR-030을 Accepted로 확정했다. Frozen API(두 경로 절, error contract에
+  `DORMITORY_NOT_FOUND` 명시), permission matrix를 동기화하고 baseline hash를 갱신했다. ERD·schema 변경 없음.
+- 사용자 결정으로 이번 슬라이스부터 TDD를 적용하고 `testing-strategy.md`에 test-first 순서를 규칙으로 적었다.
+- **Red:** 구현 전에 테스트를 먼저 썼다.
+  - 단위: `AdminUserAccessPolicyTest`, `DashboardScopeTest`, `DashboardCountsTest` → 대상 클래스가 없어
+    `compileTestJava` 실패(12개 compile error).
+  - 통합: `AdminUserIntegrationTest`(5), `AdminDashboardIntegrationTest`(4) → 9개 중 8개 실패(엔드포인트가
+    없어 deny-all 403). 거부 경우만 검사하는 1개는 처음부터 통과.
+- **Green:** `AdminUserAccessPolicy`, `DashboardScope`, `DashboardCounts`(순수 규칙) → 단위 테스트 통과.
+  이어서 `UserDirectory` port와 JPA adapter, `AdminUserQueryService`, `AdminUserController`/handler,
+  `DashboardQueryRepository`(native 집계)와 adapter, `DashboardService`, `AdminDashboardController`/handler,
+  `DormitoryRepository.findAllIds` → 통합 9개 통과. 그 과정에서 테스트 쪽 URL 이중 인코딩(`%20`) 버그를
+  고쳤다(검증 내용은 그대로).
+- **Refactor/게이트:** `SecurityBoundaryTest`에 새 서비스 mock 두 개를 추가했다.
+- 검증(Ubuntu, Docker Desktop): `check_repository.py` 통과, guard 회귀 테스트(`unittest discover`) 통과,
+  `git diff --check` 통과, `./gradlew check bootJar` 통과(unit 30 suites / 152 tests),
+  `./gradlew integrationTest` 통과(28 suites / 190 tests).
+- 문서: README와 roadmap의 Phase 5를 완료로, PROJECT_CONTEXT를 갱신했다.
+- 남은 작업: Phase 5 frozen 표면 완료. 다음은 Phase 6(Docker 통합 정리, 운영 migration 실행 방식) 또는
+  Phase 8의 실제 S3 adapter. 커밋은 아직 안 했다.
+- 주의: ADMIN의 resident 조회는 `UserDirectory.findResidentByEmail`로만 가야 한다. 목록 query에
+  `role=RESIDENT`를 ADMIN 경로로 넘기는 변경은 ADR-030 위반이다.
+
 ## 2026-11-27 - 메인 README 전면 개편
 
 - 사용자 요청으로 `README.md`를 다시 썼다. "foundation만 담는다", "`/me`는 401" 같은 오래된 설명을 걷어내고,

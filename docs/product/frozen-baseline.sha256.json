@@ -2,8 +2,8 @@
   "docs/product/problem-definition.md": "fad64331d9a4a21672c99db329c7b5582b9a12813648ff31a066fcbbfc872e46",
   "docs/product/v1-scope.md": "66313bdefeb16f888bab3656d7843720a477b600fcdae1c8a170070214acece0",
   "docs/product/erd-v1.md": "8ba3cdd6e78e25b36f3171a2fbe84f075de868bbc17afeaacc32c6be29f5f71a",
-  "docs/product/api-spec-v1.md": "8819c5dd81490dc773f494f4c137801ca1e8975afa177b7d8c2b84d6455aa87d",
-  "docs/product/permission-state-matrix-v1.md": "d7d130cb3df93ed10dd55408e0850feb4894cc7a4fa11d3bba977d7948d0f5d2",
+  "docs/product/api-spec-v1.md": "fb220b28bdd235c2fefc3aaf82b9918d74abcab07ea3f2293102daaa947776df",
+  "docs/product/permission-state-matrix-v1.md": "33750d17105678a540a20561871eada34f788bafb462c05f33b08ae0935d7491",
   "docs/architecture/aggregate-boundaries.md": "716fe7f17ee909c4f69a4239bcab964e6bca2fdb09d7aac3c7c9f92e88f0c195",
   "docs/architecture/transaction-boundaries.md": "ac9ca6d4bf2b5b0ce69c1dd6d157226ea228610ddbf198a6d31375b7a7c3ea90",
   "docs/architecture/domain-events.md": "b694c82b017e597f191cbaa8f4dc48662011ebcec1ceea94413c50b1745dc477"

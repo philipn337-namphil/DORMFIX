@@ -40,7 +40,7 @@ flowchart LR
 | 1 | 인증: 회원가입, 로그인, RS256 JWT, refresh 토큰 교체, 로그아웃 | ✅ 완료 |
 | 2 | 구조 데이터: 기숙사·건물·공간·시설·카테고리, 거주 | ✅ 완료 |
 | 3–4 | 신고 핵심: 생성·조회, 배정, 상태 전이, 낙관적 잠금 | ✅ 완료 |
-| 5 | Workflow 완성: 방문, 작업 기록, 댓글, 첨부, 이력, 알림 | 🔶 관리자 사용자 목록·대시보드 남음 |
+| 5 | Workflow 완성: 방문, 작업 기록, 댓글, 첨부, 이력, 알림, 관리자 조회·대시보드 | ✅ 완료 |
 | 6 | Docker 통합 정리와 운영 migration 실행 방식 | 🔶 부분 완료 |
 | 7 | AWS EC2 전통 배포 | ⏳ 예정 |
 | 8 | RDS·S3·IAM·CloudWatch 연동, 실제 S3 adapter | ⏳ 예정 |
@@ -101,6 +101,7 @@ stateDiagram-v2
 | 첨부 | presigned URL 계약과 메타데이터 (실제 S3는 Phase 8, 지금은 503으로 명시적 실패) |
 | 이력 | 신고별 RequestHistory 조회, 상태 전이 사유 보관 |
 | 알림 | 명령 커밋 뒤 이벤트로 생성되는 알림, 목록·읽음·전체 읽음·안 읽은 개수 |
+| 관리자 | 사용자 조회(작업자 목록, 입주자 정확 email 조회), 상태·우선순위별 대시보드 요약 |
 
 ## 기술 스택
 
@@ -139,9 +140,11 @@ stateDiagram-v2
 - **Frozen 계약.** `docs/product/`의 API·ERD·권한 명세는 고정되어 있고 해시로 보호됩니다. 명세가 비어
   있으면 추측해서 구현하지 않습니다.
 - **ADR 우선.** 공백은 근거 → Proposed ADR → 대안과 장단점 → 사람 승인 → 명세·해시 동기화 → 구현 순서로만
-  닫습니다. 지금까지 [ADR 29개](docs/adr/README.md)가 있습니다.
+  닫습니다. 지금까지 [ADR 30개](docs/adr/README.md)가 있습니다.
 - **Vertical slice.** 기능 하나를 API부터 migration, 테스트, 문서까지 한 브랜치(`feature/<use-case>`)에서
   끝내고 PR로 병합합니다. 계층별 브랜치는 쓰지 않습니다.
+- **TDD.** ADR-030부터 ADR의 권한 표와 규칙을 실패하는 테스트로 먼저 옮기고(Red), 통과할 만큼만
+  구현한 뒤(Green) 정리합니다(Refactor).
 - **품질 게이트.** 저장소 검사, 단위 테스트·ArchUnit·Checkstyle, Testcontainers 통합 테스트가 모두
   통과해야 완료입니다. 돌리지 못한 검사는 통과로 치지 않습니다.
 - **작업 기억.** 루트의 `PROJECT_CONTEXT.md`는 현재 상태와 확정 결정, `WORKLOG.md`는 작업마다의

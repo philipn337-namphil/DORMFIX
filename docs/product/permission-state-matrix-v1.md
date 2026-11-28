@@ -234,6 +234,16 @@ CLOSED, REJECTED, DUPLICATE는 terminal이다. 다른 transition은 허용하지
 - 상위 비활성화는 하위로 자동 전파하지 않는다. 비활성 상위 아래의 생성과 재활성화는 허용하지 않는다.
 - 운영 데이터는 hard delete하지 않는다.
 
+## Administrator user lookup과 dashboard
+
+- `GET /admin/users`: `SUPER_ADMIN`은 모든 사용자를 조회한다. `ADMIN`은 `role=WORKER` 목록과
+  `role=RESIDENT` + 정확한 `email` 조회(0~1건)만 쓸 수 있고, 그 밖의 요청은 `403 ACCESS_DENIED`다.
+  scope 없는 `ADMIN`도 두 조회를 쓸 수 있다. `RESIDENT`/`WORKER`만 가진 caller는 403이다. 응답에
+  phone, student number, last login은 없다.
+- `GET /admin/dashboard/summary`: `SUPER_ADMIN`은 전체 또는 지정한 dormitory, `ADMIN`은 scope의
+  dormitory 합계 또는 scope 안의 지정 dormitory를 집계한다. scope 밖 지정과 scope 없는 `ADMIN`은
+  403이다. 개수만 반환한다.
+
 ## Notification 세부
 
 - Notification은 command commit 뒤 listener가 기록한다. best-effort, 최대 한 번이며 유실될 수 있고

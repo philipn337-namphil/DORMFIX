@@ -4,6 +4,17 @@
 
 각 질문은 소유 feature slice에서 evidence와 함께 검토하고, 필요하면 proposed ADR로 올린다. 승인 전에는 기존 state, permission, ERD, API semantics를 유지한다.
 
+## Resolved 관리자 사용자 조회와 대시보드 계약
+
+2026-11-28 human approval으로 [ADR-030](../adr/ADR-030-admin-users-and-dashboard-contract.md)이 Frozen
+API의 "representative ... GET users and GET dashboard summary" 공백을 닫았다. Residence PATCH는
+ADR-018이 이미 닫았다.
+
+- `GET /admin/users`: ADMIN은 worker 목록과 resident 정확 email 조회만, SUPER_ADMIN은 전체. 응답은
+  id, name, email, roles, status만.
+- `GET /admin/dashboard/summary`: status별·active priority별 개수, rolling 7일 생성·종료 수. ADMIN은
+  scope 합계, scope 밖 지정은 403.
+
 ## Resolved Notification 계약
 
 2026-11-27 human approval으로 [ADR-029](../adr/ADR-029-notification-contract.md)의 V1 Notification

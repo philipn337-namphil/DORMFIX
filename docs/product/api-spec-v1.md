@@ -522,7 +522,34 @@ Facility status commands allow `ACTIVE -> OUT_OF_SERVICE -> ACTIVE`, and `ACTIVE
 
 Category reactivation is an explicit SUPER_ADMIN command. It returns 409 `INACTIVE_PARENT` when its immediate parent is inactive; parent deactivation does not cascade. Residence uses `[startDate, endDate)` dates. Creation accepts only `residentId`, `roomSpaceId`, and a non-future `startDate`, always creates a current record, and is ended only by the explicit end command. Admin list requires one of `residentId`, `roomSpaceId`, or `current`, has size 1–100, and uses `startDate DESC, id DESC`. Admin operations require the room dormitory scope; residents read only their own history.
 
-Admin group `/admin/...` also includes representative POST/PATCH residences, GET users and GET dashboard summary. Facility management is limited to the ADMIN's dormitory scope; SUPER_ADMIN is global. MaintenanceCategory is V1 global Master Data and is SUPER_ADMIN-only. Do not invent a generic delete endpoint.
+Admin group `/admin/...` also includes the residence paths above (ADR-018 closed the representative PATCH: V1 has no generic residence PATCH), `GET /admin/users` and `GET /admin/dashboard/summary` (ADR-030, below). Facility management is limited to the ADMIN's dormitory scope; SUPER_ADMIN is global. MaintenanceCategory is V1 global Master Data and is SUPER_ADMIN-only. Do not invent a generic delete endpoint.
+
+### Administrator user lookup and dashboard
+
+`GET /admin/users?role=&status=&email=&page=&size=` returns `UserPageResponse(content, page, size,
+totalElements, totalPages)` with items `UserSummaryResponse(id, name, email, roles, status)`. Phone,
+student number, last login and timestamps are never returned. A `SUPER_ADMIN` may list every user
+with optional `role`, `status` and `email` filters. An `ADMIN` may list every `WORKER` with
+`role=WORKER`, because workers carry no dormitory scope, and may look up a `RESIDENT` only with
+`role=RESIDENT` and an exact `email`, which returns zero or one row; there is no resident browsing.
+Any other `ADMIN` request (no `role`, `role=ADMIN` or `SUPER_ADMIN`, or `RESIDENT` without `email`)
+and every caller without an administrator role is `403 ACCESS_DENIED`. An `ADMIN` without a scope
+may still use both lookups; the later assignment and residence commands check scope. `email` is
+trimmed and lower-cased and compared exactly. An unparsable `role` or `status` is
+`400 VALIDATION_FAILED`. Order is fixed at `name ASC, id ASC`; `page` is zero-based with default
+`0` and `size` is `1..100` with default `20`.
+
+`GET /admin/dashboard/summary?dormitoryId=` returns `DashboardSummaryResponse(dormitoryIds,
+statusCounts, activePriorityCounts, createdLast7Days, closedLast7Days, generatedAt)`.
+`statusCounts` has every request status as a key and `activePriorityCounts` every priority, counting
+non-terminal requests only; absent values are `0`. `createdLast7Days` and `closedLast7Days` count
+requests created, and closed by `closed_at`, in the rolling 7×24 hours before `generatedAt`.
+`dormitoryIds` lists the counted dormitories in ascending order. Requests are scoped through space,
+building and dormitory, inactive ones included. A `SUPER_ADMIN` counts every dormitory without
+`dormitoryId`, or the named one, and a missing dormitory is `404 DORMITORY_NOT_FOUND`. An `ADMIN`
+counts all scoped dormitories without `dormitoryId`; a named dormitory outside scope, or an
+`ADMIN` with no scope, is `403 ACCESS_DENIED`. Every other caller is `403 ACCESS_DENIED`. The
+summary returns counts only, never request rows.
 
 Structure administration policy: only SUPER_ADMIN may create, update, or deactivate Dormitory, Building, and Space. An ADMIN with the relevant dormitory scope or a SUPER_ADMIN may create, update, and issue the Facility status commands. MaintenanceCategory creation, update, and deactivation are SUPER_ADMIN-only. Parent deactivation does not automatically propagate to children; creation and reactivation below an inactive parent are denied; operational data is never hard-deleted.
 
@@ -543,7 +570,7 @@ Authorize request -> server issues S3 presigned upload URL -> client uploads dir
 | 400 | Input validation | INVALID_VISIT_TIME, INVALID_ENTRY_POLICY, INVALID_FILE_TYPE, FILE_TOO_LARGE |
 | 401 | Authentication missing/invalid | AUTHENTICATION_REQUIRED |
 | 403 | Authenticated but wrong role/ownership/current assignment | ACCESS_DENIED, WORKER_NOT_ASSIGNED |
-| 404 | Resource does not exist | USER_NOT_FOUND, SPACE_NOT_FOUND, FACILITY_NOT_FOUND, REQUEST_NOT_FOUND, WORKER_NOT_FOUND, VISIT_NOT_FOUND, COMMENT_NOT_FOUND, ATTACHMENT_NOT_FOUND, NOTIFICATION_NOT_FOUND |
+| 404 | Resource does not exist | USER_NOT_FOUND, DORMITORY_NOT_FOUND, SPACE_NOT_FOUND, FACILITY_NOT_FOUND, REQUEST_NOT_FOUND, WORKER_NOT_FOUND, VISIT_NOT_FOUND, COMMENT_NOT_FOUND, ATTACHMENT_NOT_FOUND, NOTIFICATION_NOT_FOUND |
 | 409 | Business state/concurrency conflict | INVALID_REQUEST_STATE, REQUEST_ALREADY_ASSIGNED, INVALID_FACILITY_STATE, VERSION_CONFLICT |
 
 INVALID_WORKER is also a representative frozen code; exact validation-vs-business-conflict mapping must be specified by assignment API review. Do not map every integrity constraint error to VERSION_CONFLICT.
