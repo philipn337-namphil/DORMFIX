@@ -19,7 +19,12 @@
 - 주의: `--warning-mode all`에서 `Configuration.setVisible(boolean)` deprecation 1건이 나온다. 출처는 Spring
   Boot Gradle plugin 3.5.x(`JavaPluginAction`)이고 Gradle 11에서 제거 예정이다. 우리 build script 문제가 아니며
   Gradle 11 전에 Boot 쪽 갱신을 확인한다.
-- 남은 작업: Dependabot ignore 규칙(`eclipse-temurin` 메이저 등)을 `dependabot.yml`에 넣을지는 미결.
+- 사용자 요청으로 `.github/dependabot.yml`을 정리했다. Gradle 생태계는 `org.springframework.boot*` 메이저를
+  무시하고 minor·patch를 한 PR로 묶는다. GitHub Actions는 전부 한 그룹으로 묶는다. Docker는
+  `eclipse-temurin` 메이저(Java 21 고정, ADR-001)를 무시한다. 생태계별 열린 PR 수를 3/3/2로 제한했다.
+  Gradle wrapper 메이저는 막지 않는다(검사 스크립트가 고정 체크섬으로 사람 검토를 강제하므로 알림 역할).
+- 검증: YAML 파싱 확인, `check_repository.py`와 guard 회귀 테스트 통과. Dependabot 설정 자체는 GitHub에
+  병합된 뒤에만 실제로 적용된다.
 
 ## 2026-11-28 - 관리자 사용자 조회·대시보드 슬라이스 구현 (ADR-030, 첫 TDD 슬라이스)
 

@@ -1,14 +1,32 @@
 version: 2
 updates:
+  # Spring Boot and Java are baseline decisions (ADR-001): a major upgrade needs an ADR, not a
+  # Dependabot PR. Minor and patch updates are grouped so the queue stays reviewable.
   - package-ecosystem: gradle
     directory: /backend
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: "org.springframework.boot*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      gradle-minor-and-patch:
+        update-types: ["minor", "patch"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns: ["*"]
+  # The images stay on Java 21 (ADR-001); only same-major image updates are proposed.
   - package-ecosystem: docker
     directory: /backend
     schedule:
       interval: weekly
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
